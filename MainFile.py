@@ -1,8 +1,10 @@
 import os
 from dotenv import load_dotenv
 import asyncio
-from RetrieveDataAndPlaceOrderViaAPI_test import *
+from DataRetriever import *
 from OrderGateWay import *
+from order_manager import *
+from ExecutionModule import *
 
 def get_credential():
     CredentialFile = 'API key.env'
@@ -12,57 +14,66 @@ def get_credential():
     API_secret = os.getenv('secret')
     return API_key, API_secret
 
-if __name__ == "__main__":
+# Async main entry (callable from launcher or directly)
+async def main():
     api_key, api_secret = get_credential()
 
-    async def main():
+    #Data collector gateway that runs continuously
 
-        #Data collector gateway that runs continuously
+    collector = BinanceTestnetDataCollector(
+        symbol="BTCUSDT",
+        api_key=api_key,
+        api_secret=api_secret,
+    )
 
-        collector = BinanceTestnetDataCollector(
-            symbol="BTCUSDT",
-            api_key=api_key,
-            api_secret=api_secret,
-        )
+    await collector.start()
 
-        await collector.start()
+    #Order placement gateway
 
+    order_gateway = BinanceOrderGateway(client=collector.client, symbol=collector.symbol)
 
-        #Order placement gateway
+    execution = OrderExecution(order_gateway=order_gateway, data_collector=collector)
 
-        order_gateway = BinanceOrderGateway(client=collector.client, symbol=collector.symbol)
+    while not (collector.depth_data and collector.depth_data["bids"] and collector.depth_data["asks"]):
+        print("⏳ Waiting for depth data to initialize...")
+        await asyncio.sleep(0.1)
 
+# Starting order_manager
+    # orderlist = LocalOrderManager()
 
-
-
+    await execution.execute_order(symbol="BTCUSDT", side="BUY", quantity=0.1)
 
 # Below are orders
 
-        #placing market order
-        # await order_gateway.place_order("BUY", order_type="MARKET", quantity=0.01)
+    #placing market order
+    # await order_gateway.place_order("BUY", order_type="MARKET", quantity=0.01)
 
-        #placing stop limit order
-        # await order_gateway.place_order("SELL", order_type="LIMIT", quantity=0.01, price=68000)
+    #placing stop limit order
+    # await order_gateway.place_order("SELL", order_type="LIMIT", quantity=0.01, price=68000)
 
-        #placing stop market order
-        # await order_gateway.place_order("SELL", order_type="STOP_MARKET", quantity=0.01, stop_price=67000)
+    #placing stop market order
+    # await order_gateway.place_order("SELL", order_type="STOP_MARKET", quantity=0.01, stop_price=67000)
 
-        #placing stop limit order
-        # await order_gateway.place_order("BUY", order_type="STOP", quantity=0.01, stop_price=66000, price=66100)
+    #placing stop limit order
+    # await order_gateway.place_order("BUY", order_type="STOP", quantity=0.01, stop_price=66000, price=66100)
 
-        #placing trailing stop market order (1.5% of highest price since placed)
-        await order_gateway.place_order("SELL", order_type="TRAILING_STOP_MARKET", quantity=0.05, callback_rate=0.1)
+    #placing trailing stop market order (1.5% of highest price since placed)
+    # await order_gateway.place_order("BUY", order_type="TRAILING_STOP_MARKET", quantity=0.05, callback_rate=0.1)
 
+    # orderlist.record_order(order_id=response['orderId'],quantity=response['origQty'],price=response['price'],status=response['status'])
 
-        #reduce-only market order (to avoid flip the position to short)
-        # await order_gateway.place_order("SELL", order_type="MARKET", quantity=0.01, reduce_only=True)
+    # print(collector.depth_data)
+    # print(response)
 
+     #reduce-only market order (to avoid flip the position to short)
+    # await order_gateway.place_order("SELL", order_type="MARKET", quantity=0.01, reduce_only=True)
 
 #keep process running
-        while True:
-            await asyncio.sleep(1)
+    while True:
+        await asyncio.sleep(1)
 
 #Run program
+if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
