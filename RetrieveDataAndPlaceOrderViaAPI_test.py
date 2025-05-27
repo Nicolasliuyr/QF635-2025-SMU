@@ -12,7 +12,7 @@ import hmac
 import hashlib
 from urllib.parse import urlencode
 
-
+import aiohttp
 import asyncio
 import json
 import websockets
@@ -75,7 +75,7 @@ class BinanceTestnetDataCollector:
             await self._get_position()
             await self._get_open_orders()
             await self._try_push()
-            await asyncio.sleep(5)
+            await asyncio.sleep(1)
 
     async def _get_wallet_balance(self):
         account_info = await self.client.futures_account()
@@ -90,6 +90,33 @@ class BinanceTestnetDataCollector:
         if pos_info:
             self.positions = float(pos_info[0]["positionAmt"])
         self.updated["position"] = True
+
+    async def get_candlesticks(self, interval='1m', limit=100):
+        try:
+            klines = await self.client.futures_klines(symbol=self.symbol, interval=interval, limit=limit)
+            return [
+                {
+                    "open_time": datetime.fromtimestamp(k[0] / 1000),
+                    "open": float(k[1]),
+                    "high": float(k[2]),
+                    "low": float(k[3]),
+                    "close": float(k[4]),
+                    "volume": float(k[5]),
+                    "close_time": datetime.fromtimestamp(k[6] / 1000)
+                }
+                for k in klines
+            ]
+        except Exception as e:
+            print("❌ Failed to retrieve candlesticks:", str(e))
+            return []
+
+    async def get_current_price(self):
+        try:
+            ticker = await self.client.futures_symbol_ticker(symbol=self.symbol)
+            return float(ticker["price"])
+        except Exception as e:
+            print("❌ Failed to get current price:", str(e))
+            return None
 
     async def _get_open_orders(self):
         self.open_orders = await self.client.futures_get_open_orders(symbol=self.symbol)
