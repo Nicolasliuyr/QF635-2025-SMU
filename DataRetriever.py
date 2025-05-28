@@ -26,6 +26,7 @@ class BinanceTestnetDataCollector:
 
         self.client: AsyncClient = None
         self.ws_url = f"wss://stream.binancefuture.com/ws/{self.symbol.lower()}@depth5@100ms"
+        self.kline_url = f"wss://stream.binancefuture.com/ws/{self.symbol.lower()}@kline_1m"
 
         # Data containers
         self.depth_data = None
@@ -34,6 +35,7 @@ class BinanceTestnetDataCollector:
         self.open_orders = None
         self.current_price = None
         self.candlesticks = []
+        self.candle_limit = 10  # Adjustable buffer length
 
         # Update flags
         # self.updated = {
@@ -53,8 +55,19 @@ class BinanceTestnetDataCollector:
         # Override base URL for REST endpoints
         self.client.FUTURES_URL = "https://testnet.binancefuture.com"
 
+        await self._init_candlestick_buffer()
+
         asyncio.create_task(self._depth_websocket())
         asyncio.create_task(self._poll_rest_forever())
+        asyncio.create_task(self._kline_websocket())
+
+        while self.depth_data is None or not self.depth_data.get("bids") or not self.depth_data.get("asks"):
+            print("⏳ Waiting for depth data (bids/asks)...")
+            await asyncio.sleep(0.1)
+
+        print("✅ Depth data ready. Collector fully initialized.")
+
+
 
     async def _depth_websocket(self):
         async with websockets.connect(self.ws_url) as ws:
@@ -77,7 +90,8 @@ class BinanceTestnetDataCollector:
             await self._get_position()
             await self._get_open_orders()
             await self._get_current_price()
-            await self._get_candlesticks()
+            '''await self._get_candlesticks()'''
+
             self._push_data()
             await asyncio.sleep(1)
 
@@ -99,9 +113,14 @@ class BinanceTestnetDataCollector:
         self.open_orders = await self.client.futures_get_open_orders(symbol=self.symbol)
         # self.updated["orders"] = True
 
-    async def _get_candlesticks(self, interval='1m', limit=1):
+    async def _init_candlestick_buffer(self):
+        print("📦 Initializing candlestick buffer from REST")
         try:
-            klines = await self.client.futures_klines(symbol=self.symbol, interval=interval, limit=limit)
+            raw = await self.client.futures_klines(
+                symbol=self.symbol,
+                interval="1m",
+                limit=self.candle_limit
+            )
             self.candlesticks = [
                 {
                     "open_time": datetime.fromtimestamp(k[0] / 1000),
@@ -110,13 +129,46 @@ class BinanceTestnetDataCollector:
                     "low": float(k[3]),
                     "close": float(k[4]),
                     "volume": float(k[5]),
-                    "close_time": datetime.fromtimestamp(k[6] / 1000)
+                    "close_time": datetime.fromtimestamp(k[6] / 1000),
                 }
-                for k in klines
+                for k in raw
             ]
         except Exception as e:
-            print("❌ Failed to retrieve candlesticks:", str(e))
+            print(f"❌ Failed to initialize candles from REST: {e}")
             self.candlesticks = []
+
+    async def _kline_websocket(self):
+        async with websockets.connect(self.kline_url) as ws:
+            async for msg in ws:
+                data = json.loads(msg)
+                k = data.get("k", {})
+
+                candle = {
+                    "open_time": datetime.fromtimestamp(k["t"] / 1000),
+                    "open": float(k["o"]),
+                    "high": float(k["h"]),
+                    "low": float(k["l"]),
+                    "close": float(k["c"]),
+                    "volume": float(k["v"]),
+                    "close_time": datetime.fromtimestamp(k["T"] / 1000),
+                }
+
+                # Initialize if needed
+                if not self.candlesticks:
+                    self.candlesticks.append(candle)
+
+                # Replace developing candle
+                elif self.candlesticks[-1]["open_time"] == candle["open_time"]:
+                    self.candlesticks[-1] = candle
+
+                # Append new candle only if strictly newer
+                elif candle["open_time"] > self.candlesticks[-1]["open_time"]:
+                    self.candlesticks.append(candle)
+
+                # Trim to maintain fixed buffer
+                if len(self.candlesticks) > self.candle_limit:
+                    self.candlesticks.pop(0)
+
 
     async def _get_current_price(self):
         try:
@@ -143,7 +195,7 @@ class BinanceTestnetDataCollector:
         #        self.updated[key] = False
 
     def _push_data(self):
-        print("✅ Testnet Push:")
+        """print("✅ Testnet Push:")
         if self.depth_data:
             print(f"  Bids (Top 5): {self.depth_data['bids'][:5]}")
             print(f"  Asks (Top 5): {self.depth_data['asks'][:5]}")
@@ -158,4 +210,4 @@ class BinanceTestnetDataCollector:
             candle = self.candlesticks[-1]
             print(f"  Last Candle [Open: {candle['open']}, High: {candle['high']}, Low: {candle['low']}, Close: {candle['close']}] at {candle['open_time']}")
 
-        print("-" * 60)
+        print("-" * 60)"""
