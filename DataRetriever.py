@@ -36,6 +36,9 @@ class BinanceTestnetDataCollector:
         self.current_price = None
         self.candlesticks = []
         self.candle_limit = 10  # Adjustable buffer length
+        self.available_balance = None
+        self.initial_margin = None
+        self.maint_margin = None
 
         # Update flags
         # self.updated = {
@@ -90,6 +93,7 @@ class BinanceTestnetDataCollector:
             await self._get_position()
             await self._get_open_orders()
             await self._get_current_price()
+            await self._get_available_balance()
             '''await self._get_candlesticks()'''
 
             self._push_data()
@@ -107,7 +111,9 @@ class BinanceTestnetDataCollector:
         pos_info = await self.client.futures_position_information(symbol=self.symbol)
         if pos_info:
             self.positions = float(pos_info[0]["positionAmt"])
-        # self.updated["position"] = True
+            self.initial_margin = float(pos_info[0]["initialMargin"])
+            self.maint_margin = float(pos_info[0]["maintMargin"])
+            # self.updated["position"] = True
 
     async def _get_open_orders(self):
         self.open_orders = await self.client.futures_get_open_orders(symbol=self.symbol)
@@ -188,6 +194,14 @@ class BinanceTestnetDataCollector:
             print("❌ Failed to calculate mid price:", str(e))
         return None
 
+    async def _get_available_balance(self):
+        try:
+            account_info = await self.client.futures_account()
+            self.available_balance = float(account_info["availableBalance"])
+        except Exception as e:
+            print("❌ Failed to get available margin:", str(e))
+            self.available_balance = None
+
     #async def _try_push(self):
      #   if all(self.updated.values()):
       #      self._push_data()
@@ -195,7 +209,7 @@ class BinanceTestnetDataCollector:
         #        self.updated[key] = False
 
     def _push_data(self):
-        """print("✅ Testnet Push:")
+        print("✅ Testnet Push:")
         if self.depth_data:
             print(f"  Bids (Top 5): {self.depth_data['bids'][:5]}")
             print(f"  Asks (Top 5): {self.depth_data['asks'][:5]}")
@@ -203,11 +217,15 @@ class BinanceTestnetDataCollector:
 
         print(f"  Wallet Balance: {self.wallet_balance}")
         print(f"  Position: {self.positions}")
+        print(f"  Initial Margin: {self.initial_margin}")
+        print(f"  Maintenance Margin: {self.maint_margin}")
         print(f"  Current Price: {self.current_price}")
         print(f"  Mid Price: {self.get_mid_price()}")
+        print(f"  Wallet Balance: {self.wallet_balance}")
+        print(f"  Available Margin: {self.available_balance}")
 
         if self.candlesticks:
             candle = self.candlesticks[-1]
             print(f"  Last Candle [Open: {candle['open']}, High: {candle['high']}, Low: {candle['low']}, Close: {candle['close']}] at {candle['open_time']}")
 
-        print("-" * 60)"""
+        print("-" * 60)
