@@ -141,10 +141,10 @@ if __name__ == "__main__":
         table = pd.DataFrame({'A': [1, 2], 'B': [3, 4]})
 
         # Send normal alert
-        # await bot.send_normal_alert("📊 Market Update", chart, table)
+        await bot.send_normal_alert("📊 Market Update", chart, table)
 
         # Fire critical alert (background, non-blocking)
-        await bot.send_critical_alert("🚨 Alert!", chart, table)
+        # await bot.send_critical_alert("🚨 Alert!", chart, table)
 
         # Main task continues without blocking
         for i in range(30):

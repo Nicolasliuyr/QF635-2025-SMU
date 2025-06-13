@@ -41,7 +41,6 @@ async def main():
     gateway = BinanceOrderGateway(client=collector.client, symbol=collector.symbol)
     execution = OrderExecution(order_gateway=gateway, data_collector=collector)
 
-
     # Step 3: Begin trading loop
     while True:
         #print(len(collector.candlesticks))
