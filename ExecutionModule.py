@@ -29,7 +29,7 @@ class OrderExecution:
             quantity=quantity,
             price=mid_price
         )
-
+        print (limit_order)
         if not limit_order or "orderId" not in limit_order:
             print("❌ Limit order failed to place")
             return

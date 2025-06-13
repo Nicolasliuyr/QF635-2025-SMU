@@ -61,7 +61,8 @@ async def main():
             storage.append_new_candles([finalized_candle], signal_map={open_time: signal})
 
             if signal in ["BUY", "SELL"]:
-                await execution.execute_order(SYMBOL, signal, quantity=0.1)
+                response = await execution.execute_order(SYMBOL, signal, quantity=0.1)
+                print (response)
                 storage.append_new_candles([finalized_candle],
                                            signal_map={open_time: signal},
                                            fill_status_map={open_time: "F"})
@@ -74,7 +75,7 @@ async def main():
         # 🟢 Always write the developing candle separately every second
         developing_candle = collector.candlesticks[-1].copy()
         developing_candle["refresh_time"] = datetime.utcnow()  # force-refresh tag
-        print("🟢 Pushing developing candle to storage:", developing_candle["open_time"].strftime("%H:%M:%S"))
+        # print("🟢 Pushing developing candle to storage:", developing_candle["open_time"].strftime("%H:%M:%S"))
         storage.append_new_candles([developing_candle])
 
         await asyncio.sleep(1)
