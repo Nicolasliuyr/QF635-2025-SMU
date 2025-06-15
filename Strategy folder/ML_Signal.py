@@ -12,7 +12,7 @@ import holidays
 from sklearn.linear_model import SGDClassifier
 from sklearn.preprocessing import StandardScaler
 from binance import AsyncClient
-from BinanceTestnetDataCollector import *
+from DataRetriever import *
 
 
 class Signal:
@@ -41,7 +41,6 @@ class Signal:
         self.VWAP_PERIOD = 15
         self.ENTROPY_WINDOW = 10
         self.ML_MIN_BARS = 90
-        self.series=None
 
         #ML model parameters
             # SGDClassifier from grid search/backtest
@@ -75,25 +74,25 @@ class Signal:
 
 
     #### ML inputes into ML
-    def calculate_entropy(series, window=ENTROPY_WINDOW):
+    def calculate_entropy(self, series):
         returns = np.log(series / series.shift(1))
-        entropy = returns.rolling(window).std()
+        entropy = returns.rolling(self.ENTROPY_WINDOW).std()
         return entropy
 
     ### ML inputes into ML
-    def calculate_vwap(df, period=VWAP_PERIOD):
-        vwap = (df['close'] * df['volume']).rolling(period).sum() / df['volume'].rolling(period).sum()
+    def calculate_vwap(self, df):
+        vwap = (df['close'] * df['volume']).rolling(self.VWAP_PERIOD).sum() / df['volume'].rolling(self.VWAP_PERIOD).sum()
         return vwap
 
     ### ML inputes into ML
-    def calculate_ofi(df, window=ENTROPY_WINDOW):
+    def calculate_ofi(self, df):
         delta = df['close'] - df['open']
         ofi = delta * df['volume']
-        ofi_index = ofi.rolling(window).mean() / df['volume'].rolling(window).mean()
+        ofi_index = ofi.rolling(self.ENTROPY_WINDOW).mean() / df['volume'].rolling(self.ENTROPY_WINDOW).mean()
         return ofi_index
 
     ### filtering for trend - trading condition
-    def calculate_adx(df, window=ADX_WINDOW):
+    def calculate_adx(self, df):
         high = df['high']
         low = df['low']
         close = df['close']
@@ -103,56 +102,55 @@ class Signal:
         tr2 = (high - close.shift()).abs()
         tr3 = (low - close.shift()).abs()
         tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        atr = tr.rolling(window).mean()
-        plus_di = 100 * (plus_dm.rolling(window).sum() / atr)
-        minus_di = 100 * (minus_dm.rolling(window).sum() / atr)
+        atr = tr.rolling(self.ADX_WINDOW).mean()
+        plus_di = 100 * (plus_dm.rolling(self.ADX_WINDOW).sum() / atr)
+        minus_di = 100 * (minus_dm.rolling(self.ADX_WINDOW).sum() / atr)
         dx = (abs(plus_di - minus_di) / (plus_di + minus_di)) * 100
-        adx = dx.rolling(window).mean()
+        adx = dx.rolling(self.ADX_WINDOW).mean()
         return adx
 
 
-    def get_feature_df():
-        n = max(ML_MIN_BARS + ADX_WINDOW + 10, 200)
-        df = get_klines(SYMBOL, INTERVAL, limit=n)
-        df['entropy'] = calculate_entropy(df['close'], ENTROPY_WINDOW)
-        df['vwap'] = calculate_vwap(df, VWAP_PERIOD)
-        df['ofi'] = calculate_ofi(df, ENTROPY_WINDOW)
+    def get_feature_df(self):
+        n = max(self.ML_MIN_BARS + self.ADX_WINDOW + 10, 200)
+        df = get_klines(SYMBOL, INTERVAL, limit=n) ##### To align on the candlestick data format
+        df['entropy'] = self.calculate_entropy(df['close'])
+        df['vwap'] = self.calculate_vwap(df)
+        df['ofi'] = self.calculate_ofi(df)
         df['vwap_dev'] = df['close'] - df['vwap']
-        df['adx'] = calculate_adx(df, window=ADX_WINDOW)
+        df['adx'] = self.calculate_adx(df)
         df['weekday'] = df['timestamp'].dt.day_name()
         return df.dropna().reset_index(drop=True)
 
 
-
     #### final signal output
-    def get_signal(df):
-        global ml_trained, scaler, sgd, ml_history
+    def get_signal(self, df):
+        #global ml_trained, scaler, sgd, ml_history
         latest = df.iloc[-1]
         hour = latest['timestamp'].hour
-        if TRADE_HOURS_UTC and hour not in TRADE_HOURS_UTC:
+        if self.TRADE_HOURS_UTC and hour not in self.TRADE_HOURS_UTC:
             return 0
-        if latest['weekday'] in EXCLUDE_WEEKDAYS:
+        if latest['weekday'] in self.EXCLUDE_WEEKDAYS:
             return 0
-        if latest['adx'] <= ADX_THRESHOLD:
+        if latest['adx'] <= self.ADX_THRESHOLD:
             return 0
-        if not ml_trained:
-            if len(df) >= ML_MIN_BARS + 1:
-                closes = df['close'].tail(ML_MIN_BARS + 1).reset_index(drop=True)
+        if not self.ml_trained:
+            if len(df) >= self.ML_MIN_BARS + 1:
+                closes = df['close'].tail(self.ML_MIN_BARS + 1).reset_index(drop=True)
                 y_init = (closes.shift(-1)[:-1] > closes[:-1]).astype(int)
-                X_init = df[FEATURES].tail(ML_MIN_BARS).dropna().reset_index(drop=True)
-                scaler.fit(X_init)
-                sgd.partial_fit(scaler.transform(X_init), y_init[:len(X_init)], classes=[0, 1])
+                X_init = df[self.FEATURES].tail(self.ML_MIN_BARS).dropna().reset_index(drop=True)
+                self.scaler.fit(X_init)
+                self.sgd.partial_fit(self.scaler.transform(X_init), y_init[:len(X_init)], classes=[0, 1])
                 ml_trained = True
             return 0
-        X_now = df[FEATURES].iloc[[-1]]
-        X_scaled = scaler.transform(X_now)
-        prob = sgd.predict_proba(X_scaled)[0, 1]
-        if len(ml_history) > 0:
-            realized = int(df['close'].iloc[-1] > ml_history[-1])
-            X_past = df[FEATURES].iloc[[-2]]
-            X_past_scaled = scaler.transform(X_past)
-            sgd.partial_fit(X_past_scaled, [realized])
-        ml_history.append(df['close'].iloc[-1])
+        X_now = df[self.FEATURES].iloc[[-1]]
+        X_scaled = self.scaler.transform(X_now)
+        prob = self.sgd.predict_proba(X_scaled)[0, 1]
+        if len(self.ml_history) > 0:
+            realized = int(df['close'].iloc[-1] > self.ml_history[-1])
+            X_past = df[self.FEATURES].iloc[[-2]]
+            X_past_scaled = self.scaler.transform(X_past)
+            self.sgd.partial_fit(X_past_scaled, [realized])
+        self.ml_history.append(df['close'].iloc[-1])
         if prob > 0.7:    ### ML probably hurdle for generating signal.
             return "BUY"
         elif prob < 0.3:
@@ -162,13 +160,13 @@ class Signal:
 
 
     ### execution of circuit_breaker
-    def circuit_breaker(df, pct_drop=CIRCUIT_BREAKER_DROP, lookback=CIRCUIT_BREAKER_LOOKBACK):
-        if len(df) < lookback:
+    def circuit_breaker(self, df):
+        if len(df) < self.CIRCUIT_BREAKER_LOOKBACK:
             return False  # Not enough data, don't block
-        start_price = df['close'].iloc[-lookback]
+        start_price = df['close'].iloc[-self.CIRCUIT_BREAKER_LOOKBACK]
         end_price = df['close'].iloc[-1]
         drop = (start_price - end_price) / start_price
-        if drop >= pct_drop:
-            print(f"[CIRCUIT BREAKER] BTC dropped {drop*100:.2f}% in last {lookback} bars. No new trades.")
+        if drop >= self.CIRCUIT_BREAKER_DROP:
+            print(f"[CIRCUIT BREAKER] BTC dropped {drop*100:.2f}% in last {self.CIRCUIT_BREAKER_LOOKBACK} bars. No new trades.")
             return True  # Block trades
         return False
