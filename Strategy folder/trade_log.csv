@@ -1,0 +1,4 @@
+datetime_open,datetime_close,symbol,side,open_price,close_price,quantity,signal,pnl,commission,trade_length_min,binance_order_id,binance_trade_time,official_realized_pnl,official_commission,reason
+123,,,,,,,,,,,,,,,
+asb,,,,,,,,,,,,,,,
+2025,2026,2025,2025,2025,2025,2025,2025,2025,2025,2025,2025,2025,2025,2025,2025
