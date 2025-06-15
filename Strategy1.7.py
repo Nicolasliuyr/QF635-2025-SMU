@@ -190,6 +190,11 @@ def get_klines(symbol, interval, limit=200):
 def calculate_entropy(series, window=ENTROPY_WINDOW):
     returns = np.log(series / series.shift(1))
     entropy = returns.rolling(window).std()
+    #print('start of series')
+    #print(series)
+    #print('end of series')
+    #print(entropy)
+
     return entropy
 ###
 

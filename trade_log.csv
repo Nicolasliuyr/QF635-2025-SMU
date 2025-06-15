@@ -1,0 +1,2 @@
+datetime_open,datetime_close,symbol,side,open_price,close_price,quantity,signal,pnl,commission,trade_length_min,binance_order_id,binance_trade_time,official_realized_pnl,official_commission,reason
+2025-06-15 04:26:39.430342+00:00,2025-06-15 04:26:43.606000+00:00,BTCUSDT,LONG,104608.496,104608.496,0.1,1,25.56012,1.265526,0.0018579,4530182756,2025-06-15 04:26:43.606000+00:00,25.56012,1.265526,TP hit

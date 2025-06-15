@@ -18,14 +18,13 @@ from BinanceTestnetDataCollector import *
 class Signal:
 
     def __init__(self, MARKETDATA: BinanceTestnetDataCollector): #To enhance
-        self.SYMBOL = '1m'
+
+        #Trading parameters
+        self.SYMBOL = 'BTCUSDT'
         self.INTERVAL = '1m'
         self.INITIAL_EQUITY = 10_000
-        self.VWAP_PERIOD = 15
-        self.ENTROPY_WINDOW = 10
-        self.ML_MIN_BARS = 90
-        self.FEATURES = ['ofi', 'entropy', 'vwap_dev']
-        self.RISK_PCT = 0.01
+
+        #Risk Position, Trade parameters
         self.STOP_LOSS_PCT = 0.003
         self.TAKE_PROFIT_PCT = 0.007
         self.LEVERAGE = 50
@@ -33,37 +32,46 @@ class Signal:
         self.TRAIL_GIVEBACK = 1.25
         self.ROUND_TRIP_FEE_RATE = 0.0008
         self.MIN_QTY = 0.001
-        self.TRADE_HOURS_UTC = []  # e.g., [11, 12, 13] for 7–9pm SGT
-        self.EXCLUDE_WEEKDAYS = [] # e.g., ['Sunday']
+
+        #ML training parameters
+        self.FEATURES = ['ofi', 'entropy', 'vwap_dev']
+        self.RISK_PCT = 0.01
         self.ADX_WINDOW = 14
         self.ADX_THRESHOLD = 25
-        self.TRADING_HOUR_START = None
-        self.TRADING_HOUR_END = None
-        self.MARKETDATA = MARKETDATA
+        self.VWAP_PERIOD = 15
+        self.ENTROPY_WINDOW = 10
+        self.ML_MIN_BARS = 90
+        self.series=None
+
+        #ML model parameters
+            # SGDClassifier from grid search/backtest
+        self.sgd = SGDClassifier(
+            loss='log_loss',  # or your grid search result
+            penalty='elasticnet',  # or your grid search result
+            alpha=0.001,  # or your grid search result
+            l1_ratio=0.15,  # or your grid search result
+            random_state=42,
+            max_iter=1000,
+            tol=1e-3
+            )
+        self.scaler = StandardScaler()
+        self.ml_trained = False
+        self.ml_history = []
+        self.current_trade = None
+
+        #Circuit Breaker parameters
         self.CIRCUIT_BREAKER_DROP = 0.025  # 2.5%
         self.CIRCUIT_BREAKER_LOOKBACK = 1440  # 1440 bars = 1 day for 1m bars
 
+        #Signal generating date/time parameters
+        self.us_holidays = holidays.US()
+        self.TRADING_HOUR_START = None
+        self.TRADING_HOUR_END = None
+        self.TRADE_HOURS_UTC = []  # e.g., [11, 12, 13] for 7–9pm SGT
+        self.EXCLUDE_WEEKDAYS = [] # e.g., ['Sunday']
 
-
-    us_holidays = holidays.US()
-
-    ###### ML module - feature-start
-    # SGDClassifier from grid search/backtest
-    sgd = SGDClassifier(
-        loss='log_loss',         # or your grid search result
-        penalty='elasticnet',    # or your grid search result
-        alpha=0.001,             # or your grid search result
-        l1_ratio=0.15,           # or your grid search result
-        random_state=42,
-        max_iter=1000,
-        tol=1e-3
-    )
-    scaler = StandardScaler()
-    ml_trained = False
-    ml_history = []
-    current_trade = None
-
-    ##### ML module - feature-end
+        # data gateway coonection
+        self.MARKETDATA = MARKETDATA
 
 
     #### ML inputes into ML
