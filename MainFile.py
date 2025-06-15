@@ -60,8 +60,9 @@ async def main():
             storage.append_new_candles([finalized_candle], signal_map={open_time: signal})
 
             if signal in ["BUY", "SELL"]:
-                asyncio.create_task(execution.execute_order(SYMBOL, signal, quantity=0.1))
-                #asyncio.create_task(execution.square_off())
+                #asyncio.create_task(execution.execute_order(SYMBOL, signal, quantity=0.1))
+                asyncio.sleep(15)
+                asyncio.create_task(execution.square_off())
                 storage.append_new_candles([finalized_candle],
                                            signal_map={open_time: signal},
                                            fill_status_map={open_time: "F"})
