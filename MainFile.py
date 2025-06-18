@@ -8,6 +8,7 @@ from ExecutionModule import *
 from DataStorage import *
 from Strategy import *
 from datetime import datetime
+from ML_Signal import *
 
 
 def get_credential():
@@ -41,10 +42,12 @@ async def main():
     gateway = BinanceOrderGateway(client=collector.client, symbol=collector.symbol)
     execution = OrderExecution(order_gateway=gateway, data_collector=collector)
 
+    ML_signalSubject = Signal(MARKETDATA=collector)
+
     # Step 3: Begin trading loop
     while True:
         #print(len(collector.candlesticks))
-        if len(collector.candlesticks) < 10:
+        if len(collector.developedCandlesticks) < 10:
             await asyncio.sleep(1)
             continue
         #print(collector.candlesticks)
@@ -53,16 +56,24 @@ async def main():
         open_time = finalized_candle["open_time"]
 
         if open_time not in processed_signals:
-            signal = decide_trade_signal(collector.candlesticks[-10:])
+
+            signal=ML_signalSubject.get_signal()
+            #signal = decide_trade_signal(collector.candlesticks[-10:])
             print("📦 Candlesticks in collector:", len(collector.candlesticks))
             print("🕐 Finalized:", finalized_candle)
             print("📤 Writing signal to storage...")
             storage.append_new_candles([finalized_candle], signal_map={open_time: signal})
 
+            print('signal start!!!!!!!!!!!!!!')
+            print(signal)
+            print('signal end!!!!!!!!!!!!!!')
+
             if signal in ["BUY", "SELL"]:
                 #asyncio.create_task(execution.execute_order(SYMBOL, signal, quantity=0.1))
-                asyncio.sleep(15)
-                asyncio.create_task(execution.square_off())
+                #asyncio.sleep(15)
+                #asyncio.create_task(execution.square_off())
+
+
                 storage.append_new_candles([finalized_candle],
                                            signal_map={open_time: signal},
                                            fill_status_map={open_time: "F"})

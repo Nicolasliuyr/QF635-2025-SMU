@@ -17,6 +17,9 @@ import json
 import websockets
 from binance import AsyncClient
 
+import pandas as pd
+from datetime import datetime, timezone
+
 
 class BinanceTestnetDataCollector:
     def __init__(self, symbol: str, api_key: str, api_secret: str):
@@ -35,10 +38,11 @@ class BinanceTestnetDataCollector:
         self.open_orders = None
         self.current_price = None
         self.candlesticks = []
-        self.candle_limit = 10  # Adjustable buffer length
+        self.candle_limit = 200  # Adjustable buffer length
         self.available_balance = None
         self.initial_margin = None
         self.maint_margin = None
+        self.developedCandlesticks = None
 
         # Update flags
         # self.updated = {
@@ -68,6 +72,10 @@ class BinanceTestnetDataCollector:
             print("⏳ Waiting for depth data (bids/asks)...")
             await asyncio.sleep(0.1)
 
+        while self.developedCandlesticks is None:
+            print("⏳ Waiting for Candlesticks...")
+            await asyncio.sleep(0.1)
+
         print("✅ Depth data ready. Collector fully initialized.")
 
 
@@ -94,6 +102,7 @@ class BinanceTestnetDataCollector:
             await self._get_open_orders()
             await self._get_current_price()
             await self._get_available_balance()
+            await self._get_developedCandlesticks()
             '''await self._get_candlesticks()'''
 
             self._push_data()
@@ -175,6 +184,29 @@ class BinanceTestnetDataCollector:
                 if len(self.candlesticks) > self.candle_limit:
                     self.candlesticks.pop(0)
 
+    async def _get_developedCandlesticks(self):
+        try:
+            raw = await self.client.futures_klines(
+                symbol=self.symbol,
+                interval="1m",
+                limit=self.candle_limit-1
+            )
+
+            self.developedCandlesticks = pd.DataFrame(raw, columns=[
+                'timestamp', 'open', 'high', 'low', 'close', 'volume',
+                'close_time', 'quote_asset_volume', 'number_of_trades',
+                'taker_buy_base_volume', 'taker_buy_quote_volume', 'ignore'])
+
+            self.developedCandlesticks['close'] = self.developedCandlesticks['close'].astype(float)
+            self.developedCandlesticks['volume'] = self.developedCandlesticks['volume'].astype(float)
+            self.developedCandlesticks['high'] = self.developedCandlesticks['high'].astype(float)
+            self.developedCandlesticks['low'] = self.developedCandlesticks['low'].astype(float)
+            self.developedCandlesticks['open'] = self.developedCandlesticks['open'].astype(float)
+            self.developedCandlesticks['timestamp'] = pd.to_datetime(self.developedCandlesticks['timestamp'], unit='ms')
+
+        except Exception as e:
+            print(f"❌ Failed to get developed candles from REST: {e}")
+            self.developedCandlesticks = []
 
     async def _get_current_price(self):
         try:

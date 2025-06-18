@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 import holidays
 from sklearn.linear_model import SGDClassifier
 from sklearn.preprocessing import StandardScaler
-from binance import AsyncClient
+from binance import AsyncClient #from binance.async_client import AsyncClient # use this if install with the latest library
 from DataRetriever import *
 
 
@@ -112,7 +112,7 @@ class Signal:
 
     def get_feature_df(self):
         n = max(self.ML_MIN_BARS + self.ADX_WINDOW + 10, 200)
-        df = get_klines(SYMBOL, INTERVAL, limit=n) ##### To align on the candlestick data format
+        df = self.MARKETDATA.developedCandlesticks
         df['entropy'] = self.calculate_entropy(df['close'])
         df['vwap'] = self.calculate_vwap(df)
         df['ofi'] = self.calculate_ofi(df)
@@ -123,25 +123,30 @@ class Signal:
 
 
     #### final signal output
-    def get_signal(self, df):
+    def get_signal(self):
         #global ml_trained, scaler, sgd, ml_history
+        df = self.get_feature_df()
         latest = df.iloc[-1]
         hour = latest['timestamp'].hour
         if self.TRADE_HOURS_UTC and hour not in self.TRADE_HOURS_UTC:
-            return 0
+            return "Time" #0
         if latest['weekday'] in self.EXCLUDE_WEEKDAYS:
-            return 0
+            return "Day" #0
         if latest['adx'] <= self.ADX_THRESHOLD:
-            return 0
+            return "ADX" #0
         if not self.ml_trained:
+            print(len(df))
+            print(self.ML_MIN_BARS)
+            print(self.ml_trained)
             if len(df) >= self.ML_MIN_BARS + 1:
                 closes = df['close'].tail(self.ML_MIN_BARS + 1).reset_index(drop=True)
                 y_init = (closes.shift(-1)[:-1] > closes[:-1]).astype(int)
                 X_init = df[self.FEATURES].tail(self.ML_MIN_BARS).dropna().reset_index(drop=True)
                 self.scaler.fit(X_init)
                 self.sgd.partial_fit(self.scaler.transform(X_init), y_init[:len(X_init)], classes=[0, 1])
-                ml_trained = True
-            return 0
+                self.ml_trained = True
+                print(self.ml_trained)
+            return "ML" #0
         X_now = df[self.FEATURES].iloc[[-1]]
         X_scaled = self.scaler.transform(X_now)
         prob = self.sgd.predict_proba(X_scaled)[0, 1]
