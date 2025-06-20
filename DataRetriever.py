@@ -35,6 +35,9 @@ class BinanceTestnetDataCollector:
         self.depth_data = None
         self.wallet_balance = None
         self.positions = None
+        self.entryPrice = None
+        self.unRealizedProfit = None
+        self.side = None
         self.open_orders = None
         self.current_price = None
         self.candlesticks = []
@@ -122,6 +125,17 @@ class BinanceTestnetDataCollector:
             self.positions = float(pos_info[0]["positionAmt"])
             self.initial_margin = float(pos_info[0]["initialMargin"])
             self.maint_margin = float(pos_info[0]["maintMargin"])
+            self.entryPrice = float(pos_info[0]["entryPrice"])
+            self.unRealizedProfit = float(pos_info[0]["unRealizedProfit"])
+            if self.positions > 0:
+                self.side = 'LONG'
+            elif self.positions < 0:
+                self.side = 'SHORT'
+            else:
+                self.side = None
+
+        print (pos_info)
+
             # self.updated["position"] = True
 
     async def _get_open_orders(self):

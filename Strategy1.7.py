@@ -95,7 +95,7 @@ def fix_trade_log_header(log_file, columns):
     print(f"Header added to {log_file}!")
 ###
 
-### To re-look
+### Migrated
 CredentialFile = 'API key.env'
 CredentialFile_path = os.path.join(os.getcwd(), CredentialFile)
 load_dotenv(dotenv_path=CredentialFile_path)
@@ -107,7 +107,7 @@ API_SECRET = os.getenv('secret')
 us_holidays = holidays.US()
 ###
 
-### To re-look
+### Migrated
 client = Client(API_KEY, API_SECRET)
 client.FUTURES_URL = "https://testnet.binancefuture.com/fapi"
 ###
@@ -169,7 +169,7 @@ def log_trade(trade):
         writer.writerow([trade.get(col, "") for col in TRADE_COLUMNS])
 ###
 
-### To re-look
+### Migrated
 def get_klines(symbol, interval, limit=200):
     klines = client.futures_klines(symbol=symbol, interval=interval, limit=limit)
     df = pd.DataFrame(klines, columns=[
