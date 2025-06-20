@@ -176,6 +176,7 @@ class Signal:
             return True  # Block trades
         return False
 
+    '''
     #### Risk management - for trailing -> position management.
     def monitor_sl_tp_trailing(self):
         if self.MARKETDATA.positions == 0:
@@ -354,3 +355,4 @@ class Signal:
                     current_trade = None
             time.sleep(5)
     ###
+    '''
