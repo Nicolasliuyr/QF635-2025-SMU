@@ -1,0 +1,2 @@
+orderId,symbol,side,positionSide,type,status,origQty,executedQty,price,avgPrice,realizedPnl,updateTime,order_date
+123,BTCUSDT,BUY,test,LIMIT,NEW,0.1,0.05,10000,12000,12,1750502878116,2025-06-21

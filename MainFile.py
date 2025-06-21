@@ -9,6 +9,7 @@ from DataStorage import *
 from Strategy import *
 from datetime import datetime
 from ML_Signal import *
+from order_manager import *
 
 
 def get_credential():
@@ -40,6 +41,9 @@ async def main():
 
     # Step 2: Initialize gateway and execution after collector.client is ready
     gateway = BinanceOrderGateway(client=collector.client, symbol=collector.symbol)
+
+    ordertracker = OrderTracker(gateway)
+
     execution = OrderExecution(order_gateway=gateway, data_collector=collector)
 
     ML_signalSubject = Signal(MARKETDATA=collector)
@@ -58,7 +62,7 @@ async def main():
         if open_time not in processed_signals:
 
             signal=ML_signalSubject.get_signal()
-            #signal = decide_trade_signal(collector.candlesticks[-10:])
+            # signal = decide_trade_signal(collector.candlesticks[-10:])
             print("📦 Candlesticks in collector:", len(collector.candlesticks))
             print("🕐 Finalized:", finalized_candle)
             print("📤 Writing signal to storage...")
@@ -67,6 +71,8 @@ async def main():
             print('signal start!!!!!!!!!!!!!!')
             print(signal)
             print('signal end!!!!!!!!!!!!!!')
+
+
 
             if signal in ["BUY", "SELL"]:
                 #asyncio.create_task(execution.execute_order(SYMBOL, signal, quantity=0.1))

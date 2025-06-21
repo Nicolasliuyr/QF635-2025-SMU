@@ -37,7 +37,7 @@ class Signal:
         self.FEATURES = ['ofi', 'entropy', 'vwap_dev']
         self.RISK_PCT = 0.01
         self.ADX_WINDOW = 14
-        self.ADX_THRESHOLD = 25
+        self.ADX_THRESHOLD = 10
         self.VWAP_PERIOD = 15
         self.ENTROPY_WINDOW = 10
         self.ML_MIN_BARS = 90
@@ -133,6 +133,7 @@ class Signal:
         if latest['weekday'] in self.EXCLUDE_WEEKDAYS:
             return "Day" #0
         if latest['adx'] <= self.ADX_THRESHOLD:
+            print(latest['adx'] )
             return "ADX" #0
         if not self.ml_trained:
             print(len(df))
@@ -159,7 +160,7 @@ class Signal:
         if prob > 0.7:    ### ML probably hurdle for generating signal.
             return "BUY"
         elif prob < 0.3:
-            return "SELL"
+            return "SELL SHORT"
         else:
             return "NO_ACTION"
 
