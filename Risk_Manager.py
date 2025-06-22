@@ -34,7 +34,8 @@ class RiskManager:
             'margin_monitor_sleep': 5,  # seconds
             'stop_loss_buffer': 0.05,  # 5% stop loss buffer
             'margin_warning_threshold': 0.2,  # 20% warning
-            'margin_critical_threshold': 0.05  # 5% trigger square-off
+            'margin_critical_threshold': 0.05,  # 5% trigger square-off
+            'pre_trade_threshold': 0.3 # 30% available margin threshold for execution trade
         }
 
         self.opening_unrealised_pnl = 0
@@ -63,6 +64,44 @@ class RiskManager:
         except Exception:
             self.opening_unrealised_pnl = 0
             self.last_saved_date = datetime.now(timezone.utc).date()
+
+
+    def pre_trade_check(self, side, quantity):
+        try:
+            # Current account and price data
+            total_margin_balance = float(self.data_retriever.totalMarginBalance)
+            available_margin = float(self.data_retriever.availableBalance)
+            mark_price = float(self.data_retriever.current_price)
+            current_position = float(self.data_retriever.positions)
+
+            # Order value (margin impact estimate)
+            order_value = float(quantity) * mark_price / self.leverage
+
+            # Determine if the trade increases or decreases exposure
+            is_increasing_risk = (
+                (current_position >= 0 and side.upper() == 'BUY') or
+                (current_position <= 0 and side.upper() == 'SELL')
+            )
+
+            if is_increasing_risk:
+                # Simulate margin consumption
+                simulated_available = available_margin - order_value
+            else:
+                # Simulate margin relief (though conservatively, we won’t increase available)
+                simulated_available = available_margin  # Optional: + order_value for optimistic estimation
+
+            # Total assets = current margin balance
+            total_asset = total_margin_balance
+
+            if total_asset == 0:
+                return False  # Prevent divide by zero
+
+            ratio = simulated_available / total_asset
+            return ratio >= self.config['pre_trade_threshold']
+
+        except Exception as e:
+            print(f"[pre_trade_check] Error: {e}")
+            return False
 
     async def monitor_margin_level(self):
         while True:
