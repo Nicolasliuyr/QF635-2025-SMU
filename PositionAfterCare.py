@@ -31,7 +31,7 @@ class PositionAfterCare:
                 self.current_trade = None
             else:
                 self.current_trade = {
-                    'quantity': self.MARKETDATA.side,
+                    'quantity': self.MARKETDATA.positions,
                     'entry_price': self.MARKETDATA.entryPrice,
                     'side': self.MARKETDATA.side,
                     'official_open_pnl': self.MARKETDATA.unRealizedProfit

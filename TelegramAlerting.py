@@ -13,9 +13,6 @@ class TelegramBot:
         load_dotenv(env_path)
         self.bot_token = os.getenv("Telegram_bot_token")
         self.chat_id = os.getenv("Telegram_chat_id")
-        print('???????????????????')
-        print(self.bot_token)
-        print(self.chat_id)
         self.last_update_id = None
         self.session = None
         self.stop_critical = asyncio.Event()
