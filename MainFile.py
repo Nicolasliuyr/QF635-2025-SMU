@@ -3,10 +3,14 @@ from DataStorage import *
 from ML_Signal import *
 from order_manager import *
 from PositionAfterCare import *
+from TelegramAlerting import TelegramBot
 
+
+TelegramKey='Telegram.env'
+BinanceAPIKay='API key.env'
 
 def get_credential():
-    CredentialFile = 'API key.env'
+    CredentialFile = BinanceAPIKay
     CredentialFile_path = os.path.join(os.getcwd(), CredentialFile)
     load_dotenv(dotenv_path=CredentialFile_path)
     API_key = os.getenv('key')
@@ -44,6 +48,9 @@ async def main():
     TradeAfterCare = PositionAfterCare(MARKETDATA=collector,gateway=gateway,execution=execution)
 
     await TradeAfterCare.start()
+
+    telegram = TelegramBot(TelegramKey)
+    await telegram.start()
 
     # Step 3: Begin trading loop
     while True:

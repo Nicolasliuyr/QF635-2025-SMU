@@ -27,7 +27,7 @@ class PositionAfterCare:
     #### Risk management - for trailing -> position management.
     async def monitor_sl_tp_trailing(self):
         while True:
-            if self.MARKETDATA.positions == 0:
+            if not self.MARKETDATA.positions:
                 self.current_trade = None
             else:
                 self.current_trade = {

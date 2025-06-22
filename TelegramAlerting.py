@@ -1,14 +1,21 @@
+import os
 import asyncio
 import aiohttp
+from dotenv import load_dotenv
 from io import BytesIO
 import matplotlib.pyplot as plt
 import pandas as pd
 
 
 class TelegramBot:
-    def __init__(self):
-        self.bot_token = '7712527710:AAHmq8TAyB475TQdkllO2s3hLZipeONvN0E'
-        self.chat_id = '6772300878'
+    def __init__(self, env_path: str = '.env'):
+
+        load_dotenv(env_path)
+        self.bot_token = os.getenv("Telegram_bot_token")
+        self.chat_id = os.getenv("Telegram_chat_id")
+        print('???????????????????')
+        print(self.bot_token)
+        print(self.chat_id)
         self.last_update_id = None
         self.session = None
         self.stop_critical = asyncio.Event()
