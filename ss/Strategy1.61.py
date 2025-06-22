@@ -12,8 +12,6 @@ import holidays
 from sklearn.linear_model import SGDClassifier
 from sklearn.preprocessing import StandardScaler
 
-
-### To re-look
 # === CONFIGURATION ===
 SYMBOL = 'BTCUSDT'
 INTERVAL = '1m'
@@ -30,31 +28,23 @@ TRAIL_START_ROI = 4.0
 TRAIL_GIVEBACK = 1.25
 ROUND_TRIP_FEE_RATE = 0.0008
 MIN_QTY = 0.001
-TRADE_HOURS_UTC = []  # e.g., [11, 12, 13] for 7–9pm SGT
-EXCLUDE_WEEKDAYS = [] # e.g., ['Sunday']
+TRADE_HOURS_UTC = [4, 6, 7, 8, 18]  ### To run only from 7–9pm SGT (which is 11–13 UTC), include inside - currently is best hours
+EXCLUDE_WEEKDAYS = ['Sunday'] ## to run all days remove the 'Sunday' ## Sunday trades are not recommended due to lowest liquidity, open trades are still managed regardless if rolled into PH/Sun
 ADX_WINDOW = 14
 ADX_THRESHOLD = 25
+ROLLING_SHARPE_WINDOW = 90  # days
+SHARPE_THRESHOLD = 1.0 ## calculated from shadow curve, printed rightmost column,  No trades are blocked until you have enough data for rolling Sharpe (before that, regime is always ON).
 
 TRADING_HOUR_START = None
 TRADING_HOUR_END = None
-###
+log_file = '../trade_log.csv'
 
-### Moved
-log_file = 'trade_log.csv'
 TRADE_COLUMNS = [
     'datetime_open', 'datetime_close', 'symbol', 'side', 'open_price', 'close_price',
     'quantity', 'signal', 'pnl', 'commission', 'trade_length_min', 'binance_order_id',
     'binance_trade_time', 'official_realized_pnl', 'official_commission', 'reason'
 ]
-###
 
-### Moved
-# === Circuit Breaker Config ===
-CIRCUIT_BREAKER_DROP = 0.025  # 2.5%
-CIRCUIT_BREAKER_LOOKBACK = 1440  # 1440 bars = 1 day for 1m bars
-###
-
-### To re-look
 def print_params():
     print("\nKey Strategy Parameters Used:")
     print(f" VWAP_PERIOD        : {VWAP_PERIOD}")
@@ -74,13 +64,10 @@ def print_params():
     print(f" EXCLUDE_WEEKDAYS   : {EXCLUDE_WEEKDAYS}")
     print(f" ADX_WINDOW         : {ADX_WINDOW}")
     print(f" ADX_THRESHOLD      : {ADX_THRESHOLD}")
-    print(f" CIRCUIT_BREAKER_DROP      : {CIRCUIT_BREAKER_DROP*100:.2f}%")
-    print(f" CIRCUIT_BREAKER_LOOKBACK  : {CIRCUIT_BREAKER_LOOKBACK} bars")
+    print(f" ROLLING_SHARPE_WINDOW: {ROLLING_SHARPE_WINDOW}")
+    print(f" SHARPE_THRESHOLD   : {SHARPE_THRESHOLD}")
     print("="*70+"\n")
-###
 
-
-### Moved
 def fix_trade_log_header(log_file, columns):
     if not os.path.exists(log_file):
         return
@@ -93,56 +80,36 @@ def fix_trade_log_header(log_file, columns):
     with open(log_file, 'w', newline='') as f:
         f.write(','.join(columns) + '\n' + content)
     print(f"Header added to {log_file}!")
-###
 
-### Migrated
 CredentialFile = 'API key.env'
 CredentialFile_path = os.path.join(os.getcwd(), CredentialFile)
 load_dotenv(dotenv_path=CredentialFile_path)
 API_KEY = os.getenv('key')
 API_SECRET = os.getenv('secret')
-###
 
-### Moved
 us_holidays = holidays.US()
-###
-
-### Migrated
 client = Client(API_KEY, API_SECRET)
 client.FUTURES_URL = "https://testnet.binancefuture.com/fapi"
-###
 
-### Moved
-#### ML module - feature-start
-#### SGDClassifier from grid search/backtest
-sgd = SGDClassifier(
-    loss='log_loss',         # or your grid search result
-    penalty='elasticnet',    # or your grid search result
-    alpha=0.001,             # or your grid search result
-    l1_ratio=0.15,           # or your grid search result
-    random_state=42,
-    max_iter=1000,
-    tol=1e-3
-)
 scaler = StandardScaler()
+sgd = SGDClassifier(loss='log_loss')
 ml_trained = False
 ml_history = []
 current_trade = None
-##### ML module - feature-end
-###
+shadow_curve = []
+shadow_equity = INITIAL_EQUITY
+shadow_open_trade = None
+shadow_trailing_active = False
+shadow_peak_roi = 0
+shadow_trade_log = []
 
-
-### To re-look
 def set_leverage(symbol, leverage):
     try:
         client.futures_change_leverage(symbol=symbol, leverage=leverage)
         print(f"Set leverage to {leverage}x for {symbol}")
     except Exception as e:
         print(f"Error setting leverage: {e}")
-###
 
-### To relook
-#### Trade size determination
 def get_risk_position_size(capital, risk_pct, stop_loss_pct, btc_price, min_qty=0.001):
     dollar_risk = capital * risk_pct
     stop_loss_dollars = btc_price * stop_loss_pct
@@ -151,25 +118,19 @@ def get_risk_position_size(capital, risk_pct, stop_loss_pct, btc_price, min_qty=
     raw_qty = dollar_risk / stop_loss_dollars
     rounded_qty = math.ceil(raw_qty / min_qty) * min_qty
     return round(rounded_qty, 6)
-###
 
-### Moved
 def ensure_log_header(log_file, columns):
     if not os.path.exists(log_file) or os.stat(log_file).st_size == 0:
         with open(log_file, mode='w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(columns)
-###
 
-### Moved
 def log_trade(trade):
     ensure_log_header(log_file, TRADE_COLUMNS)
     with open(log_file, mode='a', newline='') as file:
         writer = csv.writer(file)
         writer.writerow([trade.get(col, "") for col in TRADE_COLUMNS])
-###
 
-### Migrated
 def get_klines(symbol, interval, limit=200):
     klines = client.futures_klines(symbol=symbol, interval=interval, limit=limit)
     df = pd.DataFrame(klines, columns=[
@@ -183,39 +144,22 @@ def get_klines(symbol, interval, limit=200):
     df['open'] = df['open'].astype(float)
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
     return df
-###
 
-### Moved
-#### ML inputes into ML
 def calculate_entropy(series, window=ENTROPY_WINDOW):
     returns = np.log(series / series.shift(1))
     entropy = returns.rolling(window).std()
-    #print('start of series')
-    #print(series)
-    #print('end of series')
-    #print(entropy)
-
     return entropy
-###
 
-### Moved
-#### ML inputes into ML
 def calculate_vwap(df, period=VWAP_PERIOD):
     vwap = (df['close'] * df['volume']).rolling(period).sum() / df['volume'].rolling(period).sum()
     return vwap
-###
 
-### Moved
-#### ML inputes into ML
 def calculate_ofi(df, window=ENTROPY_WINDOW):
     delta = df['close'] - df['open']
     ofi = delta * df['volume']
     ofi_index = ofi.rolling(window).mean() / df['volume'].rolling(window).mean()
     return ofi_index
-###
 
-### Moved
-#### filtering for trend - trading condition
 def calculate_adx(df, window=ADX_WINDOW):
     high = df['high']
     low = df['low']
@@ -232,29 +176,20 @@ def calculate_adx(df, window=ADX_WINDOW):
     dx = (abs(plus_di - minus_di) / (plus_di + minus_di)) * 100
     adx = dx.rolling(window).mean()
     return adx
-###
 
-### To re-look
-#### get open position
 def get_live_position(symbol):
     pos = client.futures_position_information(symbol=symbol)
     if not pos or float(pos[0]['positionAmt']) == 0.0:
         return 0.0, 0.0, 0.0
     return float(pos[0]['positionAmt']), float(pos[0]['entryPrice']), float(pos[0]['unRealizedProfit'])
-###
 
-### To re-look
-#### to make sure only 1 trades being opened.
 def cancel_all_open_orders(symbol):
     try:
         client.futures_cancel_all_open_orders(symbol=symbol)
         print(f"Canceled all open orders for {symbol}")
     except Exception as e:
         print(f"Error cancelling orders: {e}")
-###
 
-### Moved
-#### Strategy's in-memory data container
 def get_feature_df():
     n = max(ML_MIN_BARS + ADX_WINDOW + 10, 200)
     df = get_klines(SYMBOL, INTERVAL, limit=n)
@@ -265,20 +200,14 @@ def get_feature_df():
     df['adx'] = calculate_adx(df, window=ADX_WINDOW)
     df['weekday'] = df['timestamp'].dt.day_name()
     return df.dropna().reset_index(drop=True)
-###
 
-### Moved
-#### final signal output
 def get_signal(df):
     global ml_trained, scaler, sgd, ml_history
     latest = df.iloc[-1]
     hour = latest['timestamp'].hour
-    if TRADE_HOURS_UTC and hour not in TRADE_HOURS_UTC:
-        return 0
-    if latest['weekday'] in EXCLUDE_WEEKDAYS:
-        return 0
-    if latest['adx'] <= ADX_THRESHOLD:
-        return 0
+    if hour not in TRADE_HOURS_UTC: return 0
+    if latest['weekday'] in EXCLUDE_WEEKDAYS: return 0
+    if latest['adx'] <= ADX_THRESHOLD: return 0
     if not ml_trained:
         if len(df) >= ML_MIN_BARS + 1:
             closes = df['close'].tail(ML_MIN_BARS + 1).reset_index(drop=True)
@@ -297,17 +226,13 @@ def get_signal(df):
         X_past_scaled = scaler.transform(X_past)
         sgd.partial_fit(X_past_scaled, [realized])
     ml_history.append(df['close'].iloc[-1])
-    if prob > 0.7:    ### ML probably hurdle for generating signal.
+    if prob > 0.7:
         return 1
     elif prob < 0.3:
         return -1
     else:
         return 0
 
-###
-
-### Moved
-#### For trade log
 def get_last_closed_trade_details(symbol):
     trades = client.futures_account_trades(symbol=symbol)
     if trades:
@@ -318,10 +243,7 @@ def get_last_closed_trade_details(symbol):
         order_id = last_trade.get('orderId', None)
         return realized_pnl, close_time, commission, order_id
     return None, None, None, None
-###
 
-### To re-look
-#### Actual place order
 def open_long(symbol, qty):
     print(f"Placing LONG order ({qty} BTC)...")
     order = client.futures_create_order(
@@ -339,10 +261,7 @@ def open_long(symbol, qty):
         price = float(mark_price['markPrice'])
     print(f"Long opened at {price}")
     return price
-###
 
-### Moved
-#### Actual place order
 def open_short(symbol, qty):
     print(f"Placing SHORT order ({qty} BTC)...")
     order = client.futures_create_order(
@@ -360,10 +279,7 @@ def open_short(symbol, qty):
         price = float(mark_price['markPrice'])
     print(f"Short opened at {price}")
     return price
-###
 
-### Moved
-#### Actual place order
 def close_position(symbol, qty, position_amt):
     cancel_all_open_orders(symbol)
     if position_amt > 0:
@@ -405,20 +321,14 @@ def close_position(symbol, qty, position_amt):
     else:
         print("No position to close.")
         return None
-###
 
-### Moved
-#### tradelog function
 def get_trade_log_df():
     if os.path.exists(log_file):
         df = pd.read_csv(log_file)
         return df
     else:
         return pd.DataFrame(columns=TRADE_COLUMNS)
-###
 
-### Moved
-#### tradelog function-consol print
 def get_realized_stats_from_log():
     df = get_trade_log_df()
     if len(df) == 0:
@@ -432,11 +342,8 @@ def get_realized_stats_from_log():
     max_dd = df['official_realized_pnl'].min() if num_trades > 0 else 0
     max_dd_pct = (max_dd / INITIAL_EQUITY) * 100 if num_trades > 0 else 0
     return total_realized, wins, losses, num_trades, max_dd, max_dd_pct
-###
 
-### Moved
-#### tradelog function-consol print
-def print_trade_status(now, signal, position_amt, entry_price,
+def print_trade_status(now, rolling_sharpe, signal, position_amt, entry_price,
                        official_closed_pnl, closed_pnl_pct,
                        official_open_pnl, open_pnl_pct,
                        total_pnl, total_pnl_pct,
@@ -444,28 +351,25 @@ def print_trade_status(now, signal, position_amt, entry_price,
                        win_rate, roi, margin):
     print("="*75)
     print(f"[{now.strftime('%Y-%m-%d %H:%M:%S %Z')}]")
+    print(f"Rolling Sharpe (last {ROLLING_SHARPE_WINDOW}d): {rolling_sharpe if rolling_sharpe is not None else 'N/A'}")
     print(f"Signal: {signal} | Position: {position_amt:.5f} BTC | Entry: {entry_price:.2f}")
     print(f"Official Closed P&L:  ${official_closed_pnl:.2f} ({closed_pnl_pct:.2f}%)")
     print(f"Official Open P&L:    ${official_open_pnl:.2f} ({open_pnl_pct:.2f}%)  <-- Binance Unrealized P&L")
     print(f"Binance ROI:          {roi:.2f}% on Margin: ${margin:.2f}")
     print("="*75)
-###
 
-### Moved
-#### tradelog function-consol print
-def print_summary_table(all_time, today, session):
-    header = "| Metric           | All Time   | Today      | Session    |"
-    print("\n" + "-"*70)
+def print_summary_table(all_time, today, session, rolling_sharpe):
+    header = "| Metric           | All Time   | Today      | Session    | Rolling Sharpe |"
+    print("\n" + "-"*85)
     print(header)
-    print("-"*70)
+    print("-"*85)
     for metric in ["Closed P&L ($)", "Win Rate (%)", "Num Trades", "Max Drawdown ($)", "Max Drawdown (%)"]:
         all_val = all_time.get(metric, 0)
         today_val = today.get(metric, 0)
         session_val = session.get(metric, 0)
-        print(f"|{metric:<18}| {all_val:>10.2f} | {today_val:>10.2f} | {session_val:>10.2f} |")
-    print("-"*70 + "\n")
+        print(f"|{metric:<18}| {all_val:>10.2f} | {today_val:>10.2f} | {session_val:>10.2f} | {rolling_sharpe if rolling_sharpe is not None else 'N/A':>13} |")
+    print("-"*85 + "\n")
 
-### resuming the current trade data if connection is down
 def restore_current_trade(symbol):
     global current_trade
     position_amt, entry_price, official_open_pnl = get_live_position(symbol)
@@ -491,10 +395,7 @@ def restore_current_trade(symbol):
     except Exception as e:
         print("Could not restore open trade. Open P&L won't show until new trade.")
         current_trade = None
-###
 
-### To re-look
-#### Risk management - for trailing -> position management.
 def monitor_sl_tp_trailing():
     global current_trade
     while True:
@@ -653,25 +554,61 @@ def monitor_sl_tp_trailing():
                 log_trade(trade)
                 current_trade = None
         time.sleep(5)
-###
 
-### Moved
-#### execution of circuit_breaker
-def circuit_breaker(df, pct_drop=CIRCUIT_BREAKER_DROP, lookback=CIRCUIT_BREAKER_LOOKBACK):
-    if len(df) < lookback:
-        return False  # Not enough data, don't block
-    start_price = df['close'].iloc[-lookback]
-    end_price = df['close'].iloc[-1]
-    drop = (start_price - end_price) / start_price
-    if drop >= pct_drop:
-        print(f"[CIRCUIT BREAKER] BTC dropped {drop*100:.2f}% in last {lookback} bars. No new trades.")
-        return True  # Block trades
-    return False
-###
+# === Shadow Equity Logic for Rolling Sharpe ===
+def update_shadow_equity(price, now, signal):
+    global shadow_open_trade, shadow_trailing_active, shadow_peak_roi, shadow_equity
+    # Simulate paper trades in the shadow curve (strategy with NO regime filter)
+    # Note: In real bot, this uses a mini trade logic that matches live, just without regime block
+    # Only execute at same times as live (hours, ADX, volume, weekday filters)
+    if shadow_open_trade is None:
+        qty = get_risk_position_size(shadow_equity, RISK_PCT, STOP_LOSS_PCT, price)
+        if signal == 1:
+            shadow_open_trade = {'open_time': now, 'entry_price': price, 'qty': qty, 'side': 'LONG'}
+        elif signal == -1:
+            shadow_open_trade = {'open_time': now, 'entry_price': price, 'qty': -qty, 'side': 'SHORT'}
+        shadow_trailing_active, shadow_peak_roi = False, 0
 
+    # Manage shadow open trade
+    if shadow_open_trade:
+        qty, entry, side = shadow_open_trade['qty'], shadow_open_trade['entry_price'], shadow_open_trade['side']
+        margin = abs(qty) * entry / LEVERAGE
+        pnl = (price - entry) * qty if side == 'LONG' else (entry - price) * abs(qty)
+        roi = (pnl / margin) * 100 if margin else 0
+        # Trailing, TP, SL for shadow trade
+        if not shadow_trailing_active and roi >= TRAIL_START_ROI:
+            shadow_trailing_active, shadow_peak_roi = True, roi
+        if shadow_trailing_active:
+            shadow_peak_roi = max(shadow_peak_roi, roi)
+            if roi <= (shadow_peak_roi - TRAIL_GIVEBACK):
+                shadow_equity += pnl
+                shadow_open_trade = None
+                shadow_trailing_active = False
+        if roi >= TAKE_PROFIT_PCT * 100 * LEVERAGE:
+            shadow_equity += pnl
+            shadow_open_trade = None
+            shadow_trailing_active = False
+        if roi <= -STOP_LOSS_PCT * 100 * LEVERAGE:
+            shadow_equity += pnl
+            shadow_open_trade = None
+            shadow_trailing_active = False
+    # Append to shadow curve
+    shadow_curve.append(shadow_equity)
+    # Prune to last (ROLLING_SHARPE_WINDOW * 1440) to save memory
+    if len(shadow_curve) > ROLLING_SHARPE_WINDOW * 1440:
+        shadow_curve.pop(0)
 
-### To re-look
-#### Main function equivalent
+def compute_rolling_sharpe():
+    if len(shadow_curve) < ROLLING_SHARPE_WINDOW * 1440:
+        return None
+    s = pd.Series(shadow_curve)
+    returns = s.pct_change().dropna()
+    daily_returns = returns.rolling(1440).sum().dropna()
+    if daily_returns.std() == 0:
+        return 0
+    sharpe = daily_returns[-ROLLING_SHARPE_WINDOW:].mean() / daily_returns[-ROLLING_SHARPE_WINDOW:].std() * np.sqrt(365)
+    return round(sharpe, 2)
+
 def run_bot():
     global current_trade, scaler, sgd, ml_trained
     print_params()
@@ -681,21 +618,28 @@ def run_bot():
     monitor_thread = threading.Thread(target=monitor_sl_tp_trailing, daemon=True)
     monitor_thread.start()
 
+    printed_regime_msg = False
     while True:
         now = datetime.now(timezone.utc)
         hour = now.hour
 
         # Trading hour window (optional)
         if (TRADING_HOUR_START is not None and hour < TRADING_HOUR_START) or (TRADING_HOUR_END is not None and hour >= TRADING_HOUR_END):
-            print(f"Outside trading hours ({hour} UTC). Sleeping 60s.")
+            if not printed_regime_msg:
+                print(f"Outside trading hours ({hour} UTC). Sleeping 60s.")
+                printed_regime_msg = True
             time.sleep(60)
             continue
+        printed_regime_msg = False
 
         # Exclude US holidays
         if now.date() in us_holidays:
-            print(f"Today ({now.date()}) is a US public holiday. No new trades will be made, but open positions are monitored.")
+            if not printed_regime_msg:
+                print(f"Today ({now.date()}) is a US public holiday. No new trades will be made, but open positions are monitored.")
+                printed_regime_msg = True
             time.sleep(60)
             continue
+        printed_regime_msg = False
 
         feature_df = get_feature_df()
         if feature_df.empty:
@@ -703,14 +647,12 @@ def run_bot():
             time.sleep(60)
             continue
 
-        # CIRCUIT BREAKER LOGIC
-        if circuit_breaker(feature_df):
-            time.sleep(60)
-            continue
-
         latest = feature_df.iloc[-1]
         position_amt, entry_price, official_open_pnl = get_live_position(SYMBOL)
         signal = get_signal(feature_df)
+        # === Shadow equity curve update (for regime filter) ===
+        update_shadow_equity(latest['close'], now, signal)
+        rolling_sharpe = compute_rolling_sharpe()
 
         # === Stats and metrics ===
         total_realized_all, wins_all, losses_all, num_trades_all, max_dd_all, max_dd_pct_all = get_realized_stats_from_log()
@@ -751,17 +693,31 @@ def run_bot():
         session_summary = summary_all_time
 
         print_trade_status(
-            now, signal, position_amt, entry_price,
+            now, rolling_sharpe, signal, position_amt, entry_price,
             total_realized_all, closed_pnl_pct,
             official_open_pnl, open_pnl_pct,
             total_pnl, total_pnl_pct,
             max_dd_all, max_dd_pct_all,
             win_rate, roi, margin
         )
-        print_summary_table(summary_all_time, summary_today, session_summary)
+        print_summary_table(summary_all_time, summary_today, session_summary, rolling_sharpe)
 
-        # === ENTRY LOGIC ===
-        if position_amt == 0:
+        # === Regime filter logic (rolling Sharpe and weekday filter) ===
+        regime_ok = (
+            (rolling_sharpe is None or rolling_sharpe > SHARPE_THRESHOLD) and
+            (latest['weekday'] not in EXCLUDE_WEEKDAYS)
+        )
+
+        # Print regime OFF message ONCE per loop if blocked
+        if not regime_ok and not printed_regime_msg:
+            if rolling_sharpe is not None and rolling_sharpe <= SHARPE_THRESHOLD:
+                print(f"Rolling Sharpe below threshold ({rolling_sharpe} <= {SHARPE_THRESHOLD}). No new trades until regime resumes.")
+            if latest['weekday'] in EXCLUDE_WEEKDAYS:
+                print(f"Today is {latest['weekday']}. No new trades will be made, but open positions are monitored.")
+            printed_regime_msg = True
+
+        # === ENTRY LOGIC, but only if regime_ok and not holding a trade ===
+        if position_amt == 0 and regime_ok:
             if signal == 1:
                 cancel_all_open_orders(SYMBOL)
                 qty = get_risk_position_size(INITIAL_EQUITY, RISK_PCT, STOP_LOSS_PCT, latest['close'])
@@ -792,7 +748,6 @@ def run_bot():
                 print(f"Opened SHORT at {price}")
 
         time.sleep(60)
-###
 
 if __name__ == '__main__':
     fix_trade_log_header(log_file, TRADE_COLUMNS)

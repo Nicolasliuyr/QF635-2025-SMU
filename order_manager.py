@@ -7,7 +7,7 @@ from asyncio import Lock
 from OrderGateWay import *
 
 class OrderTracker:
-    def __init__(self, csv_path='OrderHistory/orders.csv', gateway=None):
+    def __init__(self, gateway: BinanceOrderGateway, csv_path: str='OrderHistory/orders.csv'):
         self.csv_path = Path(csv_path)
         self.csv_path.parent.mkdir(parents=True, exist_ok=True)
         self.gateway=gateway

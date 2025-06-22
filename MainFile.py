@@ -1,15 +1,8 @@
-import os
-from dotenv import load_dotenv
-import asyncio
-from DataRetriever import *
-from OrderGateWay import *
 from order_manager import *
-from ExecutionModule import *
 from DataStorage import *
-from Strategy import *
-from datetime import datetime
 from ML_Signal import *
 from order_manager import *
+from PositionAfterCare import *
 
 
 def get_credential():
@@ -42,11 +35,15 @@ async def main():
     # Step 2: Initialize gateway and execution after collector.client is ready
     gateway = BinanceOrderGateway(client=collector.client, symbol=collector.symbol)
 
-    ordertracker = OrderTracker(gateway)
+    ordertracker = OrderTracker(gateway=gateway)
 
     execution = OrderExecution(order_gateway=gateway, data_collector=collector)
 
     ML_signalSubject = Signal(MARKETDATA=collector)
+
+    TradeAfterCare = PositionAfterCare(MARKETDATA=collector,gateway=gateway,execution=execution)
+
+    await TradeAfterCare.start()
 
     # Step 3: Begin trading loop
     while True:

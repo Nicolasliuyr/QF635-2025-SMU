@@ -34,8 +34,8 @@ class OrderExecution:
 
                 if exec_type == "MARKET":
                     print("🚀 Executing direct MARKET order")
-                    await self.order_gateway.place_order(side=side, order_type="MARKET", quantity=quantity)
-                    return
+                    response = await self.order_gateway.place_order(side=side, order_type="MARKET", quantity=quantity)
+                    return response
 
                 limit_order = await self.order_gateway.place_order(
                     side=side,
