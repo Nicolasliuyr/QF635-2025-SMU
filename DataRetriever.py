@@ -108,7 +108,7 @@ class BinanceTestnetDataCollector:
             await self._get_developedCandlesticks()
             '''await self._get_candlesticks()'''
 
-            self._push_data()
+            '''self._push_data()'''
             await asyncio.sleep(1)
 
     async def _get_account_balance(self):
@@ -127,7 +127,7 @@ class BinanceTestnetDataCollector:
         pos_info = await self.client.futures_position_information(symbol=self.symbol)
 
         if pos_info:
-            self.positions = float(pos_info[0]["positionAmt"])
+            self.positions = round(float(pos_info[0]["positionAmt"]),3)
             self.initial_margin = float(pos_info[0]["initialMargin"])
             self.maint_margin = float(pos_info[0]["maintMargin"])
             self.entryPrice = float(pos_info[0]["entryPrice"])
@@ -138,8 +138,6 @@ class BinanceTestnetDataCollector:
                 self.side = 'SHORT'
             else:
                 self.side = None
-
-
 
     async def _get_open_orders(self):
         self.open_orders = await self.client.futures_get_open_orders(symbol=self.symbol)
@@ -228,7 +226,7 @@ class BinanceTestnetDataCollector:
     async def _get_current_price(self):
         try:
             ticker = await self.client.futures_symbol_ticker(symbol=self.symbol)
-            self.current_price = float(ticker["price"])
+            self.current_price = round(float(ticker["price"]),1)
         except Exception as e:
             print("❌ Failed to get current price:", str(e))
             self.current_price = None
@@ -238,7 +236,7 @@ class BinanceTestnetDataCollector:
             if self.depth_data and self.depth_data["bids"] and self.depth_data["asks"]:
                 best_bid = float(self.depth_data["bids"][0][0])
                 best_ask = float(self.depth_data["asks"][0][0])
-                return (best_bid + best_ask) / 2
+                return round((best_bid + best_ask) / 2,1)
         except Exception as e:
             print("❌ Failed to calculate mid price:", str(e))
         return None

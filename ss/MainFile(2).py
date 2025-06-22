@@ -4,7 +4,7 @@ from ExecutionModule import *
 from DataStorage import *
 from ss.Strategy import *
 from datetime import datetime, timezone
-from DecisionMaker import *
+from DecisionEngine import *
 
 
 SYMBOL = "BTCUSDT"

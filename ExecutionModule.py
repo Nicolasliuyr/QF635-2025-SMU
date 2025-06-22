@@ -28,12 +28,13 @@ class OrderExecution:
                 margins = {
                     "initial": self.data_collector.initial_margin,
                     "maintenance": self.data_collector.maint_margin,
-                    "available": self.data_collector.available_balance,
+                    "available": self.data_collector.availableBalance,
                 }
                 print(f"📊 Margin Snapshot — Available: {margins['available']}, Initial: {margins['initial']}, Maintenance: {margins['maintenance']}")
 
                 if exec_type == "MARKET":
                     print("🚀 Executing direct MARKET order")
+                    print(quantity)
                     response = await self.order_gateway.place_order(side=side, order_type="MARKET", quantity=quantity)
                     return response
 

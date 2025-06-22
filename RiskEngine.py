@@ -6,10 +6,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 class RiskManager:
-    def __init__(self, data_retriever, execution_module, order_manager, telegram_bot, gateway, symbol, leverage=50, storage_path='RiskHistory/risk_data.csv'):
-        self.data_retriever = data_retriever
-        self.execution_module = execution_module
-        self.order_manager = order_manager
+    def __init__(self, MARKETDATA, execution, orderMgr, telegram_bot, gateway, symbol, leverage=50, storage_path='RiskHistory/risk_data.csv'):
+        self.MARKETDATA = MARKETDATA
+        self.execution = execution
+        self.orderMgr = orderMgr
         self.telegram_bot = telegram_bot
         self.gateway = gateway
         self.symbol = symbol.upper()
@@ -26,7 +26,7 @@ class RiskManager:
 
         # Centralized configuration parameters
         self.config = {
-            'stop_loss_sleep': 5,  # seconds
+            'stop_loss_sleep': 2,  # seconds
             'var_sleep': 30,  # seconds
             'realised_pnl_sleep': 30,  # seconds
             'unrealised_pnl_sleep': 30,  # seconds
@@ -69,10 +69,10 @@ class RiskManager:
     def pre_trade_check(self, side, quantity):
         try:
             # Current account and price data
-            total_margin_balance = float(self.data_retriever.totalMarginBalance)
-            available_margin = float(self.data_retriever.availableBalance)
-            mark_price = float(self.data_retriever.current_price)
-            current_position = float(self.data_retriever.positions)
+            total_margin_balance = float(self.MARKETDATA.totalMarginBalance)
+            available_margin = float(self.MARKETDATA.availableBalance)
+            mark_price = float(self.MARKETDATA.current_price)
+            current_position = float(self.MARKETDATA.positions)
 
             # Order value (margin impact estimate)
             order_value = float(quantity) * mark_price / self.leverage
@@ -106,8 +106,8 @@ class RiskManager:
     async def monitor_margin_level(self):
         while True:
             try:
-                total_asset = float(self.data_retriever.totalMarginBalance)
-                available_margin = float(self.data_retriever.availableBalance)
+                total_asset = float(self.MARKETDATA.totalMarginBalance)
+                available_margin = float(self.MARKETDATA.availableBalance)
 
                 if total_asset == 0:
                     await asyncio.sleep(self.config['margin_monitor_sleep'])
@@ -117,7 +117,7 @@ class RiskManager:
 
                 if ratio < self.config['margin_critical_threshold']:
                     await self.telegram_bot.send_text_message("\U0001F6A8 CRITICAL: Margin available <5%. Triggering square-off!")
-                    await self.execution_module.square_off()
+                    await self.execution.square_off()
                 elif ratio < self.config['margin_warning_threshold']:
                     await self.telegram_bot.send_text_message("⚠️ WARNING: Margin available <20% of total assets.")
 
@@ -128,66 +128,141 @@ class RiskManager:
 
     async def maintain_stop_loss(self):
         while True:
-            position = self.data_retriever.positions
-            open_orders = self.data_retriever.open_orders.get(self.symbol, [])
-            stop_orders = [o for o in open_orders if o['type'] == 'STOP_MARKET']
+            try:
+                position = self.MARKETDATA.positions
+                MktPrice = self.MARKETDATA.current_price
+                open_orders = [o for o in self.MARKETDATA.open_orders if o.get("symbol") == self.symbol]
+                stop_orders = [o for o in open_orders if o['type'] == 'STOP_MARKET']
 
-            if not position or position == 0:
-                for o in stop_orders:
-                    await self.gateway.cancel_order(o['orderId'])
-                self.stop_loss_active = False
-                await asyncio.sleep(self.config['stop_loss_sleep'])
-                continue
-
-            pos_qty = abs(position)
-            pos_side = 'LONG' if float(position) > 0 else 'SHORT'
-            expected_side = 'SELL' if pos_side == 'LONG' else 'BUY'
-            expected_price = float(position) * (
-                1 - self.config['stop_loss_buffer'] if pos_side == 'LONG' else 1 + self.config['stop_loss_buffer']
-            )
-
-            valid_stop = None
-            for o in stop_orders:
-                if float(o['origQty']) == pos_qty and o['side'] == expected_side:
-                    valid_stop = o
-
-            if valid_stop:
-                if valid_stop['status'] == 'FILLED':
-                    await self.telegram_bot.send_text_message("\U0001F6A8 Stop loss executed!")
+                if not position or position == 0:
+                    # No position – cancel all SL orders
+                    for o in stop_orders:
+                        await self.gateway.cancel_order(o['orderId'])
                     self.stop_loss_active = False
-                else:
-                    self.stop_loss_order_id = valid_stop['orderId']
-                    self.stop_loss_active = True
-            else:
-                for o in stop_orders:
-                    await self.gateway.cancel_order(o['orderId'])
-                stop_order = await self.gateway.place_order(
-                    side=expected_side, quantity=pos_qty, stop_price=expected_price, order_type='STOP_MARKET'
+                    await asyncio.sleep(self.config['stop_loss_sleep'])
+                    continue
+
+                pos_qty = round(abs(position), 3)
+                pos_side = 'LONG' if float(position) > 0 else 'SHORT'
+                expected_side = 'SELL' if pos_side == 'LONG' else 'BUY'
+                expected_price = round(
+                    MktPrice * (1 - self.config['stop_loss_buffer'] if pos_side == 'LONG'
+                                else 1 + self.config['stop_loss_buffer']),
+                    1
                 )
-                self.stop_loss_order_id = stop_order['orderId']
-                self.stop_loss_active = True
+
+                # Identify the first valid stop order
+                valid_stop = None
+                for o in stop_orders:
+                    if round(float(o['origQty']), 3) == pos_qty and o['side'] == expected_side:
+                        valid_stop = o
+                        break  # use the first match
+
+                if valid_stop:
+                    # Cancel other redundant STOP_MARKET orders
+                    for o in stop_orders:
+                        if o['orderId'] != valid_stop['orderId']:
+                            await self.gateway.cancel_order(o['orderId'])
+
+                    await asyncio.sleep(2)
+
+                    # Check execution status
+                    if valid_stop.get('status') == 'FILLED':
+                        await self.telegram_bot.send_text_message("\U0001F6A8 Stop loss executed!")
+                        self.stop_loss_active = False
+                    else:
+                        self.stop_loss_order_id = valid_stop['orderId']
+                        self.stop_loss_active = True
+                else:
+                    # No valid SL – cancel all and place fresh one
+                    for o in stop_orders:
+                        await self.gateway.cancel_order(o['orderId'])
+
+                    await asyncio.sleep(2)
+
+                    stop_order = await self.gateway.place_order(
+                        side=expected_side,
+                        quantity=pos_qty,
+                        stop_price=expected_price,
+                        order_type='STOP_MARKET'
+                    )
+
+                    valid_stop = stop_order
+
+                    await asyncio.sleep(2)
+
+                    if stop_order and 'orderId' in stop_order:
+                        self.stop_loss_order_id = stop_order['orderId']
+                        self.stop_loss_active = True
+                    else:
+                        print("❌ Failed to place stop loss order.")
+                        self.stop_loss_active = False
+
+            except Exception as e:
+                print(f"[ERROR] maintain_stop_loss: {e}")
+                self.stop_loss_active = False
 
             await asyncio.sleep(self.config['stop_loss_sleep'])
 
     async def calculate_var(self):
         while True:
-            candles = await self.data_retriever.get_ad_hoc_candlesticks(self.symbol, interval='1d', limit=366)
-            prices = pd.DataFrame(candles)
+            # Retrieve candlestick data
+            candles = await self.MARKETDATA.get_ad_hoc_candlesticks(self.symbol, interval='1d', limit=366)
+            columns = [
+                'open_time', 'open', 'high', 'low', 'close', 'volume',
+                'close_time', 'quote_asset_volume', 'number_of_trades',
+                'taker_buy_base_vol', 'taker_buy_quote_vol', 'ignore'
+            ]
+            prices = pd.DataFrame(candles, columns=columns)
+
+            # Convert relevant columns
+            float_columns = ['open', 'high', 'low', 'close']
+            volume_columns = ['volume', 'quote_asset_volume', 'taker_buy_base_vol', 'taker_buy_quote_vol']
+
+            for col in float_columns:
+                prices[col] = pd.to_numeric(prices[col], errors='coerce').round(1)  # prices: 1 decimal
+
+            for col in volume_columns:
+                prices[col] = pd.to_numeric(prices[col], errors='coerce').round(3)  # volumes: 3 decimals
+
+            # Calculate log returns
             prices['returns'] = np.log(prices['close'] / prices['close'].shift(1))
             daily_returns = prices['returns'].dropna()
 
-            var_pct = np.percentile(daily_returns, 1) * self.leverage
-            var_value = var_pct * float(self.data_retriever.positions) * float(self.data_retriever.current_price)
+            # Retrieve market values
+            position = float(self.MARKETDATA.positions)
+            price = float(self.MARKETDATA.current_price)
+            margin_balance = float(self.MARKETDATA.totalMarginBalance)
+            available_margin = float(self.MARKETDATA.availableBalance)
 
+            # Compute initial margin used
+            initial_margin = margin_balance - available_margin
+
+            # Compute VaR based on position direction
+            pct_1 = np.percentile(daily_returns, 1)
+            pct_99 = np.percentile(daily_returns, 99)
+
+            if position > 0:  # Long
+                var_pct = pct_1 * self.leverage
+            elif position < 0:  # Short
+                var_pct = pct_99 * self.leverage * -1
+            else:
+                var_pct = 0.0
+
+            # Value VaR based on initial margin used
+            var_value = var_pct * initial_margin
+
+            # Save results
             self.latest_var_pct = var_pct
             self.latest_var_value = var_value
 
             await asyncio.sleep(self.config['var_sleep'])
 
+
     async def compute_realised_pnl(self):
         while True:
             try:
-                orders = self.order_manager.order_tracker
+                orders = self.orderMgr.order_tracker
                 if not orders.empty:
                     # Only include orders with actual PnL: FILLED or PARTIALLY_FILLED
                     relevant_status = ['FILLED', 'PARTIALLY_FILLED', 'CANCELED', 'EXPIRED']
@@ -199,7 +274,7 @@ class RiskManager:
 
     async def compute_unrealised_pnl(self):
         while True:
-            self.unrealised_pnl_closing = self.data_retriever.unRealizedProfit
+            self.unrealised_pnl_closing = self.MARKETDATA.unRealizedProfit
             self.daily_unrealised_pnl = (
                 self.unrealised_pnl_closing + self.realised_pnl_today - self.opening_unrealised_pnl
             )
@@ -231,7 +306,7 @@ class RiskManager:
     async def monitor_cross_day(self):
         while True:
             now = datetime.now(timezone.utc).date()
-            if now > self.last_saved_date:
+            if self.last_saved_date is None or now > self.last_saved_date:
                 await self._save_to_csv('EOD')
             await asyncio.sleep(self.config['monitor_day_sleep'])
 

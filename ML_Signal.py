@@ -160,7 +160,7 @@ class Signal:
         if prob > 0.7:    ### ML probably hurdle for generating signal.
             return "BUY"
         elif prob < 0.3:
-            return "SELL SHORT"
+            return "SELL"
         else:
             return "NO_ACTION"
 

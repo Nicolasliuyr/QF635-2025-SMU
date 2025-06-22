@@ -58,9 +58,9 @@ class PositionAfterCare:
                             f"[TRAILING STOP] Trailing stop hit! ROI={roi:.2f}% (peak was {self.current_trade['peak_roi']:.2f}%)")
 
                         if side=='LONG':
-                            await self.execution.execute_order(symbol=self.SYMBOL, side="SELL", quantity=qty, exec_type="MARKET")
+                            await self.execution.execute_order(symbol=self.SYMBOL, side="SELL", quantity=abs(qty), exec_type="MARKET")
                         elif side=="SHORT":
-                            await self.execution.execute_order(symbol=self.SYMBOL, side="BUY", quantity=qty, exec_type="MARKET")
+                            await self.execution.execute_order(symbol=self.SYMBOL, side="BUY", quantity=abs(qty), exec_type="MARKET")
 
                         '''time.sleep(2)
                         realized_pnl, close_time, commission, order_id = get_last_closed_trade_details(SYMBOL) = to get last trade details.
@@ -94,7 +94,7 @@ class PositionAfterCare:
 
                 if side == 'LONG' and roi <= sl_roi:
                     print(f"[MONITOR] Closing position due to SL hit: ROI={roi:.2f}%")
-                    await self.execution.execute_order(symbol=self.SYMBOL, side="SELL", quantity=qty, exec_type="MARKET")
+                    await self.execution.execute_order(symbol=self.SYMBOL, side="SELL", quantity=abs(qty), exec_type="MARKET")
 
                     '''time.sleep(2)
                     realized_pnl, close_time, commission, order_id = get_last_closed_trade_details(SYMBOL)
@@ -123,7 +123,7 @@ class PositionAfterCare:
 
                 elif side == 'LONG' and roi >= tp_roi:
                     print(f"[MONITOR] Closing position due to TP hit: ROI={roi:.2f}%")
-                    await self.execution.execute_order(symbol=self.SYMBOL, side="SELL", quantity=qty, exec_type="MARKET")
+                    await self.execution.execute_order(symbol=self.SYMBOL, side="SELL", quantity=abs(qty), exec_type="MARKET")
 
                     '''time.sleep(2)
                     realized_pnl, close_time, commission, order_id = get_last_closed_trade_details(SYMBOL)
@@ -152,7 +152,7 @@ class PositionAfterCare:
 
                 elif side == 'SHORT' and roi <= sl_roi:
                     print(f"[MONITOR] Closing position due to SL hit: ROI={roi:.2f}%")
-                    await self.execution.execute_order(symbol=self.SYMBOL, side="BUY", quantity=qty, exec_type="MARKET")
+                    await self.execution.execute_order(symbol=self.SYMBOL, side="BUY", quantity=abs(qty), exec_type="MARKET")
 
                     '''time.sleep(2)
                     realized_pnl, close_time, commission, order_id = get_last_closed_trade_details(SYMBOL)
@@ -181,7 +181,7 @@ class PositionAfterCare:
 
                 elif side == 'SHORT' and roi >= tp_roi:
                     print(f"[MONITOR] Closing position due to TP hit: ROI={roi:.2f}%")
-                    await self.execution.execute_order(symbol=self.SYMBOL, side="BUY", quantity=qty, exec_type="MARKET")
+                    await self.execution.execute_order(symbol=self.SYMBOL, side="BUY", quantity=abs(qty), exec_type="MARKET")
 
                     '''time.sleep(2)
                     realized_pnl, close_time, commission, order_id = get_last_closed_trade_details(SYMBOL)
