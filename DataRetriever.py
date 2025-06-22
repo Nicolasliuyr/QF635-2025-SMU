@@ -67,6 +67,7 @@ class BinanceTestnetDataCollector:
         self.client.FUTURES_URL = "https://testnet.binancefuture.com"
 
         await self._init_candlestick_buffer()
+        self._standardize_candlestick_times()
 
         asyncio.create_task(self._depth_websocket())
         asyncio.create_task(self._poll_rest_forever())
@@ -283,3 +284,11 @@ class BinanceTestnetDataCollector:
             print(f"  Last Candle [Open: {candle['open']}, High: {candle['high']}, Low: {candle['low']}, Close: {candle['close']}] at {candle['open_time']}")
 
         print("-" * 60)
+
+    def _standardize_candlestick_times(self):
+        """Ensure all candlesticks have datetime for open_time and close_time."""
+        for i, candle in enumerate(self.candlesticks):
+            if isinstance(candle.get("open_time"), int):
+                self.candlesticks[i]["open_time"] = datetime.fromtimestamp(candle["open_time"] / 1000)
+            if isinstance(candle.get("close_time"), int):
+                self.candlesticks[i]["close_time"] = datetime.fromtimestamp(candle["close_time"] / 1000)

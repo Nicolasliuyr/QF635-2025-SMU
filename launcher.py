@@ -1,87 +1,126 @@
 import tkinter as tk
+from tkinter import ttk
 from threading import Thread
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.patches as patches
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import asyncio
-from MainFile import main, storage
+import MainFile
+import pandas as pd
 
 # Global flag
 running = True
 
-def draw_candle(ax1, ax2, c, show_signal=True, show_fill=True):
-    time = c['open_time']
-    o, h, l, cl = c['open'], c['high'], c['low'], c['close']
-    volume = c['volume']
-    signal = c.get('signal')
-    fill = c.get('fill_status')
-    color = 'green' if cl >= o else 'red'
-    candle_width = 0.0005  # ~43.2 seconds
+def draw_candle(ax1, ax2, df):
+    if df.empty:
+        return
 
-    # Wick
-    ax1.plot([time, time], [l, h], color=color, linewidth=1)
+    candle_width = 0.0005
+    for idx, row in df.iterrows():
+        time = row['open_time']
+        o, h, l, c = row['open'], row['high'], row['low'], row['close']
+        color = 'green' if c >= o else 'red'
 
-    # Body
-    rect = patches.Rectangle(
-        (mdates.date2num(time) - candle_width / 2, min(o, cl)),
-        candle_width, abs(cl - o),
-        color=color
-    )
-    ax1.add_patch(rect)
+        ax1.plot([time, time], [l, h], color=color, linewidth=1)
+        rect = patches.Rectangle((mdates.date2num(time) - candle_width / 2, min(o, c)),
+                                 candle_width, abs(c - o), color=color)
+        ax1.add_patch(rect)
 
-    # Signal text (BUY/SELL) on finalized candles only
-    if show_signal and signal and signal != "HOLD":
-        ax1.text(mdates.date2num(time), h + 10, signal, ha='center', va='bottom', fontsize=9, color='blue')
+        y_base_top = h + 20
+        y_base_bottom = l - 20
+        if pd.notna(row['Signal']):
+            ax1.text(mdates.date2num(time), y_base_top, row['Signal'], ha='center', va='bottom', fontsize=8, color='blue')
+        if pd.notna(row['SignalTrade']):
+            ax1.text(mdates.date2num(time), y_base_bottom, row['SignalTrade'], ha='center', va='top', fontsize=8, color='black')
+        if pd.notna(row['AfterCare']):
+            ax1.text(mdates.date2num(time), y_base_bottom - 10, row['AfterCare'], ha='center', va='top', fontsize=8, color='purple')
+        if pd.notna(row['RiskTrigger']):
+            ax1.text(mdates.date2num(time), y_base_bottom - 20, row['RiskTrigger'], ha='center', va='top', fontsize=8, color='red')
 
-    # Fill status (F or PF)
-    if show_fill and fill:
-        ax1.text(mdates.date2num(time), l - 10, fill, ha='center', va='top', fontsize=9, color='black')
+    ax2.bar(df['open_time'], df['volume'], width=candle_width, color='gray')
 
-    # Volume bar
-    ax2.bar(time, volume, width=candle_width, color='gray')
-
-def update_chart(canvas, ax1, ax2, fig):
+def update_chart(canvas, ax1, ax2, fig, labels):
     if not running:
         return
 
-    candles = storage.get_latest_candles(minutes=60)
-    if not candles:
-        root.after(1000, update_chart, canvas, ax1, ax2, fig)
+    df = MainFile.storage.get_latest_candles()
+    if df.empty:
+        root.after(1000, update_chart, canvas, ax1, ax2, fig, labels)
         return
 
     ax1.clear()
     ax2.clear()
-
     ax1.set_title("Candlestick Chart (Past 60 Minutes)")
     ax1.set_ylabel("Price")
     ax2.set_ylabel("Volume")
     ax2.set_xlabel("Time (HH:MM)")
-
     ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
     ax1.xaxis.set_major_locator(mdates.AutoDateLocator())
     fig.autofmt_xdate()
-
-    # Separate finalized and developing candle
-    finalized = candles[:-1]
-    developing = candles[-1:]
-
-    for c in finalized:
-        draw_candle(ax1, ax2, c, show_signal=True, show_fill=True)
-
-    for c in developing:
-        draw_candle(ax1, ax2, c, show_signal=False, show_fill=False)
-
-    fig.subplots_adjust(top=0.92, bottom=0.15)
+    draw_candle(ax1, ax2, df)
+    fig.subplots_adjust(top=0.92, bottom=0.2)
     canvas.draw()
 
-    root.after(1000, update_chart, canvas, ax1, ax2, fig)
+    if MainFile.riskMgr is not None:
+        labels['realised'].config(text=f"Realised PnL: {MainFile.riskMgr.realised_pnl_today:.2f}")
+        labels['unrealised'].config(text=f"Unrealised PnL: {MainFile.riskMgr.unrealised_pnl_closing:.2f}")
+        labels['var_pct'].config(text=f"VaR %: {MainFile.riskMgr.latest_var_pct:.2%}")
+        labels['var_value'].config(text=f"VaR Value: {MainFile.riskMgr.latest_var_value:.2f}")
+
+    root.after(1000, update_chart, canvas, ax1, ax2, fig, labels)
+
+def update_open_orders(tree):
+    try:
+        if hasattr(MainFile, "collector") and MainFile.collector is not None:
+            orders = MainFile.collector.open_orders
+            tree.delete(*tree.get_children())
+
+            if not orders:
+                root.after(2000, update_open_orders, tree)
+                return
+
+            for order in orders:
+                order_type = order.get("type", "")
+                side = order.get("side", "")
+                stop_price = float(order.get("stopPrice", 0)) if "stopPrice" in order else 0
+
+                # Format condition field
+                if order_type == "STOP_MARKET":
+                    if side == "BUY":
+                        condition = f"Last Price ≥ {stop_price:,.2f}"
+                    elif side == "SELL":
+                        condition = f"Last Price ≤ {stop_price:,.2f}"
+                    else:
+                        condition = f"{stop_price:,.2f}"
+                else:
+                    condition = "-"
+
+                row = [
+                    order.get("orderId", ""),
+                    order.get("symbol", ""),
+                    side,
+                    order_type,
+                    condition,
+                    order.get("status", ""),
+                    order.get("price", ""),
+                    order.get("origQty", ""),
+                    order.get("executedQty", "")
+                ]
+
+                tree.insert('', 'end', values=row)
+
+    except Exception as e:
+        print(f"⚠️ Error updating open orders: {e}")
+    finally:
+        # Schedule the next update
+        root.after(2000, update_open_orders, tree)
 
 def start_trading():
     global running
     print("✅ Starting trading system...")
     running = True
-    Thread(target=lambda: asyncio.run(main()), daemon=True).start()
+    Thread(target=lambda: asyncio.run(MainFile.main()), daemon=True).start()
 
 def stop_trading():
     global running
@@ -89,55 +128,59 @@ def stop_trading():
     running = False
     root.destroy()
 
-# GUI setup
 root = tk.Tk()
 root.title("Trading System Launcher")
-root.geometry("1000x700")
+root.geometry("1200x800")
 
-# Create Matplotlib figure with 2 subplots (candlestick + volume)
+notebook = ttk.Notebook(root)
+notebook.pack(fill=tk.BOTH, expand=True)
+
+# === Tab 1: Candlestick Chart ===
+tab1 = tk.Frame(notebook)
+notebook.add(tab1, text="📈 Candlestick & PnL")
+
 fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, figsize=(12, 6),
                                gridspec_kw={'height_ratios': [3, 1]}, sharex=True)
-canvas = FigureCanvasTkAgg(fig, master=root)
+canvas = FigureCanvasTkAgg(fig, master=tab1)
 canvas_widget = canvas.get_tk_widget()
 canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-# Control buttons
-btn_frame = tk.Frame(root)
+metrics_frame = tk.Frame(tab1)
+metrics_frame.pack(pady=5)
+
+labels = {
+    'realised': tk.Label(metrics_frame, text="Realised PnL: 0.00", font=("Arial", 10), fg="black"),
+    'unrealised': tk.Label(metrics_frame, text="Unrealised PnL: 0.00", font=("Arial", 10), fg="black"),
+    'var_pct': tk.Label(metrics_frame, text="VaR %: 0.00%", font=("Arial", 10), fg="black"),
+    'var_value': tk.Label(metrics_frame, text="VaR Value: 0.00", font=("Arial", 10), fg="black"),
+}
+for lbl in labels.values():
+    lbl.pack(side=tk.LEFT, padx=10)
+
+btn_frame = tk.Frame(tab1)
 btn_frame.pack(side=tk.BOTTOM, pady=10)
 
 tk.Button(btn_frame, text="Y (Start)", bg="green", fg="white", width=20, height=2, command=start_trading).pack(side=tk.LEFT, padx=10)
 tk.Button(btn_frame, text="N (Exit)", bg="red", fg="white", width=20, height=2, command=stop_trading).pack(side=tk.RIGHT, padx=10)
 
-# Start the chart update loop
-root.after(1000, update_chart, canvas, ax1, ax2, fig)
+# === Tab 2: Open Orders ===
+tab2 = tk.Frame(notebook)
+notebook.add(tab2, text="📋 Open Orders")
 
-# Start GUI
-root.mainloop()
+columns = [
+    "orderId", "symbol", "side", "type", "condition",
+    "status", "price", "origQty", "executedQty"
+]
+tree = ttk.Treeview(tab2, columns=columns, show='headings')
 
-'''
-import tkinter as tk
-from threading import Thread
-import MainFile  # Make sure MainFile.py defines `async def main()`
-from MainFile import storage
+for col in columns:
+    tree.heading(col, text=col)
+    tree.column(col, anchor='center', width=120)
 
-def start_trading():
-    print("✅ Starting trading system...")
-    Thread(target=lambda: __import__('asyncio').run(MainFile.main()), daemon=True).start()
+tree.pack(fill=tk.BOTH, expand=True)
 
-def stop_trading():
-    print("🛑 Exiting without starting.")
-    root.destroy()
-
-# GUI setup
-root = tk.Tk()
-root.title("Start Trading System")
-root.geometry("300x150")
-
-tk.Label(root, text="Start Trading System?").pack(pady=10)
-
-tk.Button(root, text="Y (Start)", bg="green", fg="white", width=20, height=2, command=start_trading).pack(pady=5)
-tk.Button(root, text="N (Exit)", bg="red", fg="white", width=20, height=2, command=stop_trading).pack(pady=5)
+# Schedule updates
+root.after(1000, update_chart, canvas, ax1, ax2, fig, labels)
+root.after(2000, update_open_orders, tree)
 
 root.mainloop()
-
-'''

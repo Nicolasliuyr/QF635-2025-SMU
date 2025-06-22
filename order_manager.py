@@ -27,6 +27,7 @@ class OrderTracker:
 
         asyncio.create_task(self._update_orders_loop())
         asyncio.create_task(self._end_of_day_scheduler())
+        print("order tracker start")
 
     async def append_order(self, order_dict):
         async with self.lock:
@@ -71,6 +72,9 @@ class OrderTracker:
                 active_mask = self.order_tracker["status"].isin(active_status)
                 active_orders = self.order_tracker[active_mask]
 
+                if active_orders.empty:
+                    continue  # ✅ Skip this round if no active orders
+
                 print(f"🔄 Updating {len(active_orders)} active orders...")
 
                 for idx, row in active_orders.iterrows():
@@ -82,7 +86,7 @@ class OrderTracker:
                             # Update only fields present in both gateway result and local columns
                             for col in self.order_tracker.columns:
                                 if col in details:
-                                    self.order_tracker.at[idx, col] = details[col]
+                                    self.order_tracker.at[idx, col] = self._safe_cast(col, details[col])
 
                             # Also update "order_date" from updateTime if available
                             update_time = details.get("updateTime") or details.get("time")
@@ -154,7 +158,21 @@ class OrderTracker:
             await asyncio.sleep((next_run - now).total_seconds())
             await self.end_of_day_save()
 
-
+    ## miscellaneous function to ensure data type casting fulfills
+    def _safe_cast(self, col, value):
+        dtype = self.order_tracker[col].dtype
+        try:
+            if dtype == 'float64':
+                return float(value)
+            elif dtype == 'int64':
+                return int(float(value))
+            elif 'datetime' in str(dtype):
+                return pd.to_datetime(value, unit='ms', errors='coerce')
+            else:
+                return value
+        except Exception as e:
+            print(f"⚠️ Cast failed for {col}: {value} → {dtype} | Error: {e}")
+            return value
 
 async def main():
     tracker = OrderTracker()

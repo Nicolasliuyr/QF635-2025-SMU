@@ -1,7 +1,7 @@
 from DataRetriever import *
 from order_manager import *
 from ExecutionModule import *
-from DataStorage import *
+from CandlestickSignalStorageAndTrade import *
 from ss.Strategy import *
 from datetime import datetime, timezone
 from DecisionEngine import *
@@ -59,7 +59,7 @@ async def main():
 
     # Step 2: Initialize gateway and execution after collector.client is ready
     gateway = BinanceOrderGateway(client=collector.client, symbol=collector.symbol)
-    execution = OrderExecution(order_gateway=gateway, data_collector=collector)
+    execution = OrderExecution(gateway=gateway, MARKETDATA=collector)
 
     quantity, price, mtd_pnl = read_position_from_excel(position_file)
     decision_maker = Decisionmaker(position_qty=quantity,notional_limit=single_order_limit)

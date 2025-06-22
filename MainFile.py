@@ -1,11 +1,18 @@
 from order_manager import *
-from DataStorage import *
+from CandlestickSignalStorageAndTrade import *
 from ML_Signal import *
 from order_manager import *
 from PositionAfterCare import *
 from TelegramAlerting import TelegramBot
 from DecisionEngine import *
 from RiskEngine import *
+import copy
+from datetime import datetime
+import datetime
+
+import os
+import asyncio
+from dotenv import load_dotenv
 
 
 TelegramKey='Telegram.env'
@@ -19,99 +26,101 @@ def get_credential():
     API_secret = os.getenv('secret')
     return API_key, API_secret
 
+# to collect candlestick per second
+async def append_storage_loop(collector, storage):
+    while True:
+        try:
+            storage.append_candlesticks(copy.deepcopy(collector.candlesticks))
+        except Exception as e:
+            print(f"[Storage Append Error] {e}")
+        await asyncio.sleep(1)
+
+
 SYMBOL = "BTCUSDT"
 storage = CandlestickDataStorage()
-processed_signals = set()
-
-
+riskMgr = None
+collector = None
 
 async def main():
     api_key, api_secret = get_credential()
 
-    # Step 1: Initialize collector and await its start
+    #Initialize collector and await its start
+    global collector
     collector = BinanceTestnetDataCollector(SYMBOL, api_key, api_secret)
-
     await collector.start()
-
     await asyncio.sleep(5)
 
-    # 🆕 NEW: Batch push preloaded finalized candles to storage
-    initial_batch = collector.candlesticks[:-1]  # exclude developing candle
-    print(f"🧊 Pushing initial {len(initial_batch)} historical candles to storage")
-    storage.append_new_candles(initial_batch)
+    #Append candlesticks into storage to prepare data
+    asyncio.create_task(append_storage_loop(collector, storage))
 
-    # Step 2: Initialize gateway and execution after collector.client is ready
+    #Initialize OrderGateWay
     gateway = BinanceOrderGateway(client=collector.client, symbol=collector.symbol)
 
+    #Initialize OrderManager and get it started at background
     orderMgr = OrderTracker(gateway=gateway)
+    await orderMgr.start()
 
-    execution = OrderExecution(order_gateway=gateway, data_collector=collector)
+    #Initialize Execution Module
+    execution = OrderExecution(gateway=gateway, MARKETDATA=collector, orderMgr=orderMgr)
 
+    #Initialize ML_signal
     ML_signalSubject = Signal(MARKETDATA=collector)
 
-    TradeAfterCare = PositionAfterCare(MARKETDATA=collector,gateway=gateway,execution=execution)
-
+    #Initialize TradeAfterCare (trailing loss take profit) and start
+    TradeAfterCare = PositionAfterCare(MARKETDATA=collector,gateway=gateway,execution=execution, storage=storage)
     await TradeAfterCare.start()
 
+    #Initialize Telegram bot and start
     telegram_bot = TelegramBot(TelegramKey)
     await telegram_bot.start()
 
+    #Initialize riskMgr and itself will start
+    global riskMgr
+    riskMgr=RiskManager(MARKETDATA=collector, execution=execution, orderMgr=orderMgr,telegram_bot=telegram_bot,gateway=gateway,symbol=SYMBOL,storage=storage)
 
-    riskMgr=RiskManager(MARKETDATA=collector, execution=execution, orderMgr=orderMgr,telegram_bot=telegram_bot,gateway=gateway,symbol=SYMBOL)
-
+    #Initialize DecisionMaker
     DecisionMK = Decisionmaker(MARKETDATA=collector,riskMgr=riskMgr)
 
-
-    # Step 3: Begin trading loop
+    #Start Trading
     while True:
-        #print(len(collector.candlesticks))
-        if len(collector.developedCandlesticks) < 10:
-            await asyncio.sleep(1)
-            continue
-        #print(collector.candlesticks)
-        # Finalized candle
-        finalized_candle = collector.candlesticks[-2]
-        open_time = finalized_candle["open_time"]
 
-        if open_time not in processed_signals:
+        #While loop's execution is controlled by waiting time. it makes the execution time (from start to start) being 1m
 
-            signal=ML_signalSubject.get_signal()
-            # signal = decide_trade_signal(collector.candlesticks[-10:])
-            print("📦 Candlesticks in collector:", len(collector.candlesticks))
-            print("🕐 Finalized:", finalized_candle)
-            print("📤 Writing signal to storage...")
-            storage.append_new_candles([finalized_candle], signal_map={open_time: signal})
+        start_time = datetime.datetime.utcnow().replace(second=0, microsecond=0)
 
-            print('signal start!!!!!!!!!!!!!!')
-            print(signal)
-            print('signal end!!!!!!!!!!!!!!')
+        try:
 
+            #storage.append_candlesticks(copy.deepcopy(collector.candlesticks))
 
+            #start getting signals and quantity
+            Decision=DecisionMK.decide_order(signal=ML_signalSubject.get_signal())
 
+            signal = None
+            quantity = None
+
+            if Decision:
+                signal = Decision['side']
+                quantity = Decision['quantity']
+                storage.update_signal(signal=signal)
+
+            #Trading execution
             if signal in ["BUY", "SELL"]:
-                #asyncio.create_task(execution.execute_order(SYMBOL, signal, quantity=0.1))
-                #asyncio.sleep(15)
-                #asyncio.create_task(execution.square_off())
+                asyncio.create_task(execution.execute_order(SYMBOL, signal, quantity=quantity))
+                storage.update_signal(trade="T")
 
+            # End of loop: compute remaining time until next full minute
+            now = datetime.datetime.utcnow()
+            elapsed = (now - start_time).total_seconds()
+            wait_seconds = max(0.5, 60.0 - elapsed)
+            if wait_seconds <=0: wait_seconds = 0
+            await asyncio.sleep(wait_seconds)
 
-                storage.append_new_candles([finalized_candle],
-                                           signal_map={open_time: signal},
-                                           fill_status_map={open_time: "F"})
-            else:
-                storage.append_new_candles([finalized_candle],
-                                           signal_map={open_time: signal})
-
-            processed_signals.add(open_time)
-
-        # 🟢 Always write the developing candle separately every second
-        developing_candle = collector.candlesticks[-1].copy()
-        developing_candle["refresh_time"] = datetime.utcnow()  # force-refresh tag
-        # print("🟢 Pushing developing candle to storage:", developing_candle["open_time"].strftime("%H:%M:%S"))
-        storage.append_new_candles([developing_candle])
+        except Exception as e:
+            print(f"[Main Loop Error] {e}")
 
         await asyncio.sleep(1)
 
-__all__ = ["main", "storage"]
+__all__ = ["main", "storage","riskMgr","collector"]
 
 if __name__ == "__main__":
     asyncio.run(main())

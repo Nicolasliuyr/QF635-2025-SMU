@@ -1,17 +1,20 @@
-
+import CandlestickSignalStorageAndTrade
 from DataRetriever import *
 from OrderGateWay import *
 from ExecutionModule import *
 import time
 import asyncio
 from datetime import datetime, timezone
+import datetime
+from CandlestickSignalStorageAndTrade import *
 
 class PositionAfterCare:
 
-    def __init__(self, MARKETDATA: BinanceTestnetDataCollector=None, gateway: BinanceOrderGateway=None, execution: OrderExecution=None):
+    def __init__(self, MARKETDATA: BinanceTestnetDataCollector=None, gateway: BinanceOrderGateway=None, execution: OrderExecution=None, storage: CandlestickSignalStorageAndTrade=None):
         self.gateway=gateway
         self.MARKETDATA = MARKETDATA
         self.execution=execution
+        self.storage=storage
         self.current_trade = None
         self.STOP_LOSS_PCT = 0.003
         self.TAKE_PROFIT_PCT = 0.007
@@ -29,20 +32,21 @@ class PositionAfterCare:
         while True:
             if not self.MARKETDATA.positions:
                 self.current_trade = None
-            else:
+            elif self.current_trade == None:
                 self.current_trade = {
                     'quantity': self.MARKETDATA.positions,
                     'entry_price': self.MARKETDATA.entryPrice,
                     'side': self.MARKETDATA.side,
                     'official_open_pnl': self.MARKETDATA.unRealizedProfit
                 }
+            else: self.current_trade=self.current_trade
 
             if self.current_trade:
                 margin = abs(self.current_trade['quantity']) * self.current_trade['entry_price'] / self.LEVERAGE if self.current_trade['quantity'] != 0 else 0
                 roi = (self.current_trade['official_open_pnl'] / margin) * 100 if margin != 0 else 0
                 side = self.current_trade['side']
                 qty = self.current_trade['quantity']
-                now = datetime.now(timezone.utc)
+                now = datetime.datetime.now(timezone.utc)
 
                 # --- Trailing logic ---
                 if not self.current_trade.get('trailing_active', False):
@@ -59,8 +63,10 @@ class PositionAfterCare:
 
                         if side=='LONG':
                             await self.execution.execute_order(symbol=self.SYMBOL, side="SELL", quantity=abs(qty), exec_type="MARKET")
+                            self.storage.update_signal(aftercare="C")
                         elif side=="SHORT":
                             await self.execution.execute_order(symbol=self.SYMBOL, side="BUY", quantity=abs(qty), exec_type="MARKET")
+                            self.storage.update_signal(aftercare="C")
 
                         '''time.sleep(2)
                         realized_pnl, close_time, commission, order_id = get_last_closed_trade_details(SYMBOL) = to get last trade details.
@@ -95,6 +101,7 @@ class PositionAfterCare:
                 if side == 'LONG' and roi <= sl_roi:
                     print(f"[MONITOR] Closing position due to SL hit: ROI={roi:.2f}%")
                     await self.execution.execute_order(symbol=self.SYMBOL, side="SELL", quantity=abs(qty), exec_type="MARKET")
+                    self.storage.update_signal(aftercare="C")
 
                     '''time.sleep(2)
                     realized_pnl, close_time, commission, order_id = get_last_closed_trade_details(SYMBOL)
@@ -124,6 +131,7 @@ class PositionAfterCare:
                 elif side == 'LONG' and roi >= tp_roi:
                     print(f"[MONITOR] Closing position due to TP hit: ROI={roi:.2f}%")
                     await self.execution.execute_order(symbol=self.SYMBOL, side="SELL", quantity=abs(qty), exec_type="MARKET")
+                    self.storage.update_signal(aftercare="C")
 
                     '''time.sleep(2)
                     realized_pnl, close_time, commission, order_id = get_last_closed_trade_details(SYMBOL)
@@ -153,6 +161,7 @@ class PositionAfterCare:
                 elif side == 'SHORT' and roi <= sl_roi:
                     print(f"[MONITOR] Closing position due to SL hit: ROI={roi:.2f}%")
                     await self.execution.execute_order(symbol=self.SYMBOL, side="BUY", quantity=abs(qty), exec_type="MARKET")
+                    self.storage.update_signal(aftercare="C")
 
                     '''time.sleep(2)
                     realized_pnl, close_time, commission, order_id = get_last_closed_trade_details(SYMBOL)
@@ -182,6 +191,7 @@ class PositionAfterCare:
                 elif side == 'SHORT' and roi >= tp_roi:
                     print(f"[MONITOR] Closing position due to TP hit: ROI={roi:.2f}%")
                     await self.execution.execute_order(symbol=self.SYMBOL, side="BUY", quantity=abs(qty), exec_type="MARKET")
+                    self.storage.update_signal(aftercare="C")
 
                     '''time.sleep(2)
                     realized_pnl, close_time, commission, order_id = get_last_closed_trade_details(SYMBOL)

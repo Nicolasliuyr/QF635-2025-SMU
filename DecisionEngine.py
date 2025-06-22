@@ -14,7 +14,7 @@ class Decisionmaker:
             'quantityDecimal': 3 #round quantity amount to 3 decimal places
         }
 
-    def decide_order(self, signal: str, account_value_usdt, price_usdt, risk_pct=0.1):
+    def decide_order(self, signal: str):
 
         totalAsset = self.MARKETDATA.totalMarginBalance
         tradeQty = round(self.config['trade_size']*totalAsset*self.config['LEVERAGE']/self.MARKETDATA.current_price,self.config['quantityDecimal'])

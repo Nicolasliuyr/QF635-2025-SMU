@@ -3,16 +3,19 @@ import numpy as np
 import os
 import asyncio
 from datetime import datetime, timezone
+import datetime
 from pathlib import Path
+from CandlestickSignalStorageAndTrade import *
 
 class RiskManager:
-    def __init__(self, MARKETDATA, execution, orderMgr, telegram_bot, gateway, symbol, leverage=50, storage_path='RiskHistory/risk_data.csv'):
+    def __init__(self, MARKETDATA, execution, orderMgr, telegram_bot, gateway, symbol, storage, leverage=50, storage_path='RiskHistory/risk_data.csv'):
         self.MARKETDATA = MARKETDATA
         self.execution = execution
         self.orderMgr = orderMgr
         self.telegram_bot = telegram_bot
         self.gateway = gateway
         self.symbol = symbol.upper()
+        self.storage = storage
         self.leverage = leverage
         self.storage_path = Path(storage_path)
 
@@ -41,6 +44,7 @@ class RiskManager:
         self.opening_unrealised_pnl = 0
         self.realised_pnl_today = 0
         self.unrealised_pnl_closing = 0
+        self.daily_pnl = 0
         self.last_saved_date = None
         self.stop_loss_order_id = None
         self.stop_loss_active = False
@@ -63,7 +67,7 @@ class RiskManager:
             self.last_saved_date = latest['date'].date()
         except Exception:
             self.opening_unrealised_pnl = 0
-            self.last_saved_date = datetime.now(timezone.utc).date()
+            self.last_saved_date = datetime.datetime.now(timezone.utc).date()
 
 
     def pre_trade_check(self, side, quantity):
@@ -118,6 +122,7 @@ class RiskManager:
                 if ratio < self.config['margin_critical_threshold']:
                     await self.telegram_bot.send_text_message("\U0001F6A8 CRITICAL: Margin available <5%. Triggering square-off!")
                     await self.execution.square_off()
+                    self.storage.update_signal(risk="R")
                 elif ratio < self.config['margin_warning_threshold']:
                     await self.telegram_bot.send_text_message("⚠️ WARNING: Margin available <20% of total assets.")
 
@@ -168,6 +173,7 @@ class RiskManager:
 
                     # Check execution status
                     if valid_stop.get('status') == 'FILLED':
+                        self.storage.update_signal(risk="R")
                         await self.telegram_bot.send_text_message("\U0001F6A8 Stop loss executed!")
                         self.stop_loss_active = False
                     else:
@@ -186,6 +192,10 @@ class RiskManager:
                         stop_price=expected_price,
                         order_type='STOP_MARKET'
                     )
+
+                    # ✅ Append to Order Manager
+                    if stop_order:
+                        await self.orderMgr.append_order(stop_order)
 
                     valid_stop = stop_order
 
@@ -275,19 +285,19 @@ class RiskManager:
     async def compute_unrealised_pnl(self):
         while True:
             self.unrealised_pnl_closing = self.MARKETDATA.unRealizedProfit
-            self.daily_unrealised_pnl = (
+            self.daily_pnl = (
                 self.unrealised_pnl_closing + self.realised_pnl_today - self.opening_unrealised_pnl
             )
             await asyncio.sleep(self.config['unrealised_pnl_sleep'])
 
     async def _save_to_csv(self, label='EOD'):
         df_row = pd.DataFrame([{
-            'date': datetime.now(timezone.utc).isoformat(),
+            'date': datetime.datetime.now(timezone.utc).isoformat(),
             'type': label,
             'var_pct': self.latest_var_pct,
             'var_value': self.latest_var_value,
             'realised_pnl': self.realised_pnl_today,
-            'unrealised_pnl': self.daily_unrealised_pnl
+            'unrealised_pnl': self.unrealised_pnl_closing
         }])
 
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
@@ -301,11 +311,11 @@ class RiskManager:
         if label == 'EOD':
             self.opening_unrealised_pnl = self.unrealised_pnl_closing
             self.realised_pnl_today = 0
-            self.last_saved_date = datetime.now(timezone.utc).date()
+            self.last_saved_date = datetime.datetime.now(timezone.utc).date()
 
     async def monitor_cross_day(self):
         while True:
-            now = datetime.now(timezone.utc).date()
+            now = datetime.datetime.now(timezone.utc).date()
             if self.last_saved_date is None or now > self.last_saved_date:
                 await self._save_to_csv('EOD')
             await asyncio.sleep(self.config['monitor_day_sleep'])

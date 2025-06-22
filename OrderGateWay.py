@@ -103,3 +103,18 @@ class BinanceOrderGateway:
             return await self.client.futures_cancel_order(symbol=self.symbol, orderId=order_id)
         except Exception as e:
             print(f"❌ Failed to cancel order {order_id}:", str(e))
+
+
+    async def get_income_history(self, limit: int = 100, income_type: str = "REALIZED_PNL"):
+        """
+        Fetch recent income history, e.g., realized PnL.
+        """
+        try:
+            return await self.client.futures_income_history(
+                symbol=self.symbol,
+                limit=limit,
+                incomeType=income_type
+            )
+        except Exception as e:
+            print(f"❌ Failed to get income history:", str(e))
+            return []
