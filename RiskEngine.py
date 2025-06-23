@@ -284,10 +284,10 @@ class RiskManager:
 
     async def compute_unrealised_pnl(self):
         while True:
-            self.unrealised_pnl_closing = self.MARKETDATA.unRealizedProfit
-            self.daily_pnl = (
-                self.unrealised_pnl_closing + self.realised_pnl_today - self.opening_unrealised_pnl
-            )
+            self.unrealised_pnl_closing = float(self.MARKETDATA.unRealizedProfit or 0)
+            realised = float(self.realised_pnl_today or 0)
+            opening = float(self.opening_unrealised_pnl or 0)
+            self.daily_pnl = self.unrealised_pnl_closing + realised - opening
             await asyncio.sleep(self.config['unrealised_pnl_sleep'])
 
     async def _save_to_csv(self, label='EOD'):

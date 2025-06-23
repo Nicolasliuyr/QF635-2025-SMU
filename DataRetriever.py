@@ -33,19 +33,19 @@ class BinanceTestnetDataCollector:
 
         # Data containers
         self.depth_data = None
-        self.cash_balance = None
-        self.totalMarginBalance = None
-        self.availableBalance = None
-        self.positions = None
-        self.entryPrice = None
-        self.unRealizedProfit = None
+        self.cash_balance = 0.0
+        self.totalMarginBalance = 0.0
+        self.availableBalance = 0.0
+        self.positions = 0.0
+        self.entryPrice = 0.0
+        self.unRealizedProfit = 0.0
         self.side = None
-        self.open_orders = None
-        self.current_price = None
+        self.open_orders = []
+        self.current_price = 0.0
         self.candlesticks = []
         self.candle_limit = 200  # Adjustable buffer length
-        self.initial_margin = None
-        self.maint_margin = None
+        self.initial_margin = 0.0
+        self.maint_margin = 0.0
         self.developedCandlesticks = None
 
         # Update flags

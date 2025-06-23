@@ -16,6 +16,18 @@ class Decisionmaker:
 
     def decide_order(self, signal: str):
 
+
+        position_amt = self.MARKETDATA.positions
+
+        if position_amt != 0:
+            print(f"Already in position({position_amt}), ignoring signal:{signal}")
+            return None
+
+        if signal not in ["BUY","SELL"]:
+            print(f"Ignored signal:{signal}")
+            return None
+
+
         totalAsset = self.MARKETDATA.totalMarginBalance
         tradeQty = round(self.config['trade_size']*totalAsset*self.config['LEVERAGE']/self.MARKETDATA.current_price,self.config['quantityDecimal'])
 

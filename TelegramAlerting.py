@@ -138,7 +138,7 @@ class TelegramBot:
 # === Example Usage ===
 if __name__ == "__main__":
     async def main():
-        bot = TelegramBot()
+        bot = TelegramBot('Telegram.env')
         await bot.start()
 
         chart = bot.create_scatter_plot()
