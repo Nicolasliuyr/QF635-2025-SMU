@@ -40,6 +40,35 @@ SYMBOL = "BTCUSDT"
 storage = CandlestickDataStorage()
 riskMgr = None
 collector = None
+status = {
+    "position": 0.0,
+    "totalMarginBalance": 0.0,
+    "availableBalance": 0.0,
+    "var_value": 0.0,
+    "unrealisedPnL": 0.0,
+    "realisedPnL": 0.0,
+    "openOrders": []
+}
+
+
+async def save_all_to_csv_temp():
+    print("💾 [Temp Save] Writing data to CSV...")
+
+    try:
+        if hasattr(riskMgr, "_save_to_csv"):
+            await riskMgr._save_to_csv(label="Temp")
+
+        if hasattr(riskMgr, "orderMgr") and riskMgr.orderMgr:
+            await riskMgr.orderMgr.write_to_csv()
+
+        if storage:
+            storage.write_to_csv()
+
+        print("✅ Temp Save Completed.")
+
+    except Exception as e:
+        print(f"❌ Temp Save Failed: {e}")
+
 
 async def main():
     api_key, api_secret = get_credential()
@@ -77,9 +106,29 @@ async def main():
     #Initialize riskMgr and itself will start
     global riskMgr
     riskMgr=RiskManager(MARKETDATA=collector, execution=execution, orderMgr=orderMgr,telegram_bot=telegram_bot,gateway=gateway,symbol=SYMBOL,storage=storage)
+    await riskMgr.start_background_tasks()
 
     #Initialize DecisionMaker
     DecisionMK = Decisionmaker(MARKETDATA=collector,riskMgr=riskMgr)
+
+    async def update_status_loop():
+        while True:
+            try:
+                status["position"] = collector.positions
+                status["totalMarginBalance"] = collector.totalMarginBalance
+                status["availableBalance"] = collector.availableBalance
+                status["var_value"] = riskMgr.latest_var_value
+                status["unrealisedPnL"] = riskMgr.unrealised_pnl_closing
+                status["realisedPnL"] = riskMgr.realised_pnl_today
+                status["openOrders"] = collector.open_orders
+
+            except Exception as e:
+                print(f"[Status Update Error] {e}")
+
+            await asyncio.sleep(1)
+
+    asyncio.create_task(update_status_loop())
+
 
     #Start Trading
     while True:

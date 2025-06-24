@@ -52,7 +52,6 @@ class RiskManager:
         self.latest_var_value = 0
 
         self._load_latest()
-        asyncio.create_task(self._run_all_background_tasks())
 
     def _load_latest(self):
         try:
@@ -320,15 +319,14 @@ class RiskManager:
                 await self._save_to_csv('EOD')
             await asyncio.sleep(self.config['monitor_day_sleep'])
 
-    async def _run_all_background_tasks(self):
-        await asyncio.gather(
-            self.maintain_stop_loss(),
-            self.calculate_var(),
-            self.compute_realised_pnl(),
-            self.compute_unrealised_pnl(),
-            self.monitor_cross_day(),
-            self.monitor_margin_level()
-        )
+    async def start_background_tasks(self):
+        await asyncio.sleep(0.1)  # give control back to loop
+        asyncio.create_task(self.maintain_stop_loss())
+        asyncio.create_task(self.calculate_var())
+        asyncio.create_task(self.compute_realised_pnl())
+        asyncio.create_task(self.compute_unrealised_pnl())
+        asyncio.create_task(self.monitor_cross_day())
+        asyncio.create_task(self.monitor_margin_level())
 
     async def shutdown_and_save(self):
         await self._save_to_csv('Temp')

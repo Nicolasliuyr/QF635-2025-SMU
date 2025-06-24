@@ -60,7 +60,6 @@ class OrderExecution:
 
                 if limit_order:
                     await self.orderMgr.append_order(limit_order)
-                    await self.orderMgr.write_to_csv()
 
                 order_id = limit_order["orderId"]
                 print(f"✅ Limit order placed: {order_id}")

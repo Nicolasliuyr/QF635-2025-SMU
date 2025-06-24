@@ -99,6 +99,7 @@ class OrderTracker:
 
 
     async def write_to_csv(self):
+        print("writing to csv - order manager")
         async with self.lock:
             new_data = self.order_tracker.copy()
             if self.csv_path.exists():

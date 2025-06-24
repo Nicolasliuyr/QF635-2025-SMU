@@ -140,6 +140,17 @@ class BinanceTestnetDataCollector:
             else:
                 self.side = None
 
+        else:
+        # If pos_info is completely empty
+            self.positions = 0.0
+            self.initial_margin = 0.0
+            self.maint_margin = 0.0
+            self.entryPrice = None
+            self.unRealizedProfit = 0.0
+            self.side = None
+
+        # print("✅ [Position Cleared] No open position found.")
+
     async def _get_open_orders(self):
         self.open_orders = await self.client.futures_get_open_orders(symbol=self.symbol)
 
