@@ -48,16 +48,34 @@ class CandlestickDataStorage:
 
         df.drop_duplicates(subset="open_time", keep="last", inplace=True)
 
+        df = df.sort_values("open_time")
+
         if self.candlestickBuffer is None or self.candlestickBuffer.empty:
-            self.candlestickBuffer = df
+            # No buffer: use latest incoming only
+            self.candlestickBuffer = df.tail(self.max_minutes).copy()
+            return
+
+        # Determine time gap
+        last_buffer_time = self.candlestickBuffer["open_time"].max()
+        first_incoming_time = df["open_time"].min()
+        gap_minutes = (first_incoming_time - last_buffer_time).total_seconds() / 60
+
+        if gap_minutes >= self.max_minutes:
+            # Gap is too large, use incoming as replacement
+            self.write_to_csv()
+            self.candlestickBuffer = df.tail(self.max_minutes).copy()
+        elif gap_minutes > 0:
+            # Gap is small (partial gap), just append missing candles
+            gap_df = df[df["open_time"] > last_buffer_time]
+            self.candlestickBuffer = pd.concat([self.candlestickBuffer, gap_df], ignore_index=True)
+            self.candlestickBuffer = self.candlestickBuffer.sort_values("open_time").tail(self.max_minutes).copy()
         else:
-            # Merge to preserve older non-null signals
+            # Normal overlap — merge incoming and existing
             existing = self.candlestickBuffer.set_index("open_time")
             incoming = df.set_index("open_time")
 
-            # Merge, prioritizing latest market data but keeping older signal fields if missing
+            # Merge incoming with buffer, preserving older signal fields
             merged = incoming.combine_first(existing).combine_first(incoming).reset_index()
-            # merged = existing.combine_first(incoming).combine_first(existing).reset_index()
             merged = merged.sort_values("open_time")
             self.candlestickBuffer = merged.tail(self.max_minutes).copy()
 

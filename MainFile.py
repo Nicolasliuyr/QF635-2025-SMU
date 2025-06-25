@@ -49,6 +49,9 @@ status = {
     "realisedPnL": 0.0,
     "openOrders": []
 }
+execution = None
+telegram_bot = None
+loop = None
 
 
 async def save_all_to_csv_temp():
@@ -69,6 +72,25 @@ async def save_all_to_csv_temp():
     except Exception as e:
         print(f"❌ Temp Save Failed: {e}")
 
+def trigger_square_off():
+    try:
+        loop = asyncio.get_event_loop()
+
+        async def _square_off_and_alert():
+            if execution:
+                await execution.square_off()
+                if telegram_bot:
+                    await telegram_bot.send_text_message("🛑 Manual square-off was triggered from UI.")
+            else:
+                print("⚠️ Execution module not available.")
+
+        future = asyncio.run_coroutine_threadsafe(_square_off_and_alert(), loop)
+        print("🛑 Square-off + alert submitted to event loop.")
+        return future
+
+    except Exception as e:
+        print(f"❌ Failed to trigger square off: {e}")
+
 
 async def main():
     api_key, api_secret = get_credential()
@@ -86,10 +108,11 @@ async def main():
     gateway = BinanceOrderGateway(client=collector.client, symbol=collector.symbol)
 
     #Initialize OrderManager and get it started at background
-    orderMgr = OrderTracker(gateway=gateway)
+    orderMgr = OrderTracker(gateway=gateway, MARKETDATA=collector)
     await orderMgr.start()
 
     #Initialize Execution Module
+    global execution
     execution = OrderExecution(gateway=gateway, MARKETDATA=collector, orderMgr=orderMgr)
 
     #Initialize ML_signal
@@ -100,6 +123,7 @@ async def main():
     await TradeAfterCare.start()
 
     #Initialize Telegram bot and start
+    global telegram_bot
     telegram_bot = TelegramBot(TelegramKey)
     await telegram_bot.start()
 
@@ -129,6 +153,8 @@ async def main():
 
     asyncio.create_task(update_status_loop())
 
+    global loop
+    loop = asyncio.get_event_loop()
 
     #Start Trading
     while True:
@@ -169,10 +195,38 @@ async def main():
 
         await asyncio.sleep(1)
 
-__all__ = ["main", "storage","riskMgr","collector"]
+__all__ = ["main", "storage","riskMgr","collector","execution","telegram_bot","confirm_and_trigger_square_off"]
 
 if __name__ == "__main__":
     asyncio.run(main())
 
 
 
+def confirm_and_trigger_square_off():
+    global loop
+    if loop is None:
+        print("❌ Event loop not available.")
+        return
+
+    async def _square_off_and_alert():
+        if execution:
+            await execution.square_off()
+            if telegram_bot:
+                await telegram_bot.send_text_message("🛑 Manual square-off was triggered from UI.")
+        else:
+            print("⚠️ Execution module not available.")
+
+    asyncio.run_coroutine_threadsafe(_square_off_and_alert(), loop)
+
+
+async def send_test_warning_alert():
+    try:
+        await telegram_bot.send_text_message("⚠️ This is a test warning alert.")
+    except Exception as e:
+        print(f"❌ Failed to send warning alert: {e}")
+
+async def send_test_critical_alert():
+    try:
+        await telegram_bot.send_critical_alert("🚨 Critical alert! Please acknowledge.")
+    except Exception as e:
+        print(f"❌ Failed to send critical alert: {e}")

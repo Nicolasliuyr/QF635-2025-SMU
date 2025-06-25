@@ -145,7 +145,7 @@ class BinanceTestnetDataCollector:
             self.positions = 0.0
             self.initial_margin = 0.0
             self.maint_margin = 0.0
-            self.entryPrice = None
+            self.entryPrice = 0.0
             self.unRealizedProfit = 0.0
             self.side = None
 

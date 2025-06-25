@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 from threading import Thread
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -9,7 +9,7 @@ import asyncio
 import MainFile
 import pandas as pd
 
-running = True
+running = False
 loop = None
 
 status_labels = {}
@@ -44,8 +44,6 @@ def draw_candle(ax1, ax2, df):
 
 
 def update_chart():
-    if not running:
-        return
 
     # Get the full DataFrame from storage
     df = MainFile.storage.get_latest_candles()
@@ -98,12 +96,24 @@ def update_open_orders():
         ))
 
 
+
 def start_trading():
     global running, loop
+    if running:
+        print("⚠️ Trading system is already running.")
+        return
+
     print("✅ Starting trading system...")
     running = True
     loop = asyncio.new_event_loop()
     Thread(target=lambda: loop.run_until_complete(MainFile.main()), daemon=True).start()
+
+def confirm_square_off():
+    if messagebox.askyesno("Confirm Square-Off", "Are you sure you want to square off all positions?"):
+        print("✅ User confirmed square-off.")
+        MainFile.confirm_and_trigger_square_off()
+    else:
+        print("❎ Square-off cancelled by user.")
 
 
 def stop_trading():
@@ -130,16 +140,31 @@ notebook.pack(fill=tk.BOTH, expand=True)
 
 frame_chart = tk.Frame(notebook)
 frame_orders = tk.Frame(notebook)
+frame_test = tk.Frame(notebook)
 notebook.add(frame_chart, text="Chart")
 notebook.add(frame_orders, text="Open Orders")
+notebook.add(frame_test, text="Test Alerts")
 
 frame_top = tk.Frame(frame_chart)
 frame_top.pack(side=tk.TOP, fill=tk.X)
 
 btn_start = tk.Button(frame_top, text="Start Trading", command=start_trading, bg="green", fg="white")
 btn_start.pack(side=tk.LEFT, padx=10)
+btn_square_off = tk.Button(frame_top, text="EMERGENCY SQUARE-OFF", command=confirm_square_off, bg="orange", fg="black")
+btn_square_off.pack(side=tk.LEFT, padx=10)
 btn_stop = tk.Button(frame_top, text="Stop Trading", command=stop_trading, bg="red", fg="white")
 btn_stop.pack(side=tk.LEFT, padx=10)
+
+def send_warning_alert():
+    asyncio.run_coroutine_threadsafe(MainFile.send_test_warning_alert(), loop)
+
+def send_critical_alert():
+    asyncio.run_coroutine_threadsafe(MainFile.send_test_critical_alert(), loop)
+
+btn_warning = tk.Button(frame_test, text="Send Warning Alert", command=send_warning_alert, bg="yellow")
+btn_warning.pack(pady=20, padx=10)
+btn_critical = tk.Button(frame_test, text="Send Critical Alert", command=send_critical_alert, bg="red", fg="white")
+btn_critical.pack(pady=10, padx=10)
 
 frame_status = tk.Frame(frame_chart)
 frame_status.pack(side=tk.TOP, fill=tk.X)

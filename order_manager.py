@@ -2,21 +2,26 @@ import time
 import pandas as pd
 import asyncio
 import datetime
+from datetime import datetime, date, timedelta
 from pathlib import Path
 from asyncio import Lock
 from OrderGateWay import *
+from DataRetriever import *
 
 class OrderTracker:
-    def __init__(self, gateway: BinanceOrderGateway, csv_path: str='OrderHistory/orders.csv'):
+    def __init__(self, gateway: BinanceOrderGateway, MARKETDATA: BinanceTestnetDataCollector, csv_path: str='OrderHistory/orders.csv'):
         self.csv_path = Path(csv_path)
         self.csv_path.parent.mkdir(parents=True, exist_ok=True)
         self.gateway=gateway
+        self.MARKETDATA=MARKETDATA
         self.lock = Lock()
         self.order_tracker = pd.DataFrame(columns=[
             "orderId", "symbol", "side", "positionSide", "type", "status",
             "origQty", "executedQty", "price", "avgPrice",
             "realizedPnl", "updateTime", "order_date"
             ])
+        self.pre_qty = self.MARKETDATA.positions or 0.0
+        self.pre_price = self.MARKETDATA.entryPrice or 0.0
 
     async def start(self):
         # Load existing data or initialize file with header
@@ -34,10 +39,10 @@ class OrderTracker:
             # 1. Derive order_date from timestamp
             timestamp_ms = order_dict.get("time") or order_dict.get("updateTime")
             if timestamp_ms:
-                order_datetime = datetime.datetime.fromtimestamp(int(timestamp_ms) / 1000)
+                order_datetime = datetime.fromtimestamp(int(timestamp_ms) / 1000)
                 order_dict["order_date"] = order_datetime.date()
             else:
-                order_dict["order_date"] = datetime.date.today()
+                order_dict["order_date"] = date.today()
 
             # 2. Remove any existing entry with same orderId (if present)
             if "orderId" in order_dict:
@@ -77,12 +82,20 @@ class OrderTracker:
 
                 print(f"🔄 Updating {len(active_orders)} active orders...")
 
+                # ✅ Snapshot current pre-position info
+                pre_qty = self.MARKETDATA.positions
+                pre_price = self.MARKETDATA.entryPrice
+
                 for idx, row in active_orders.iterrows():
                     order_id = row["orderId"]
 
                     try:
                         details = await self.gateway.get_order_status(order_id=int(order_id))
                         if details:
+
+                            prev_status = row["status"]
+                            prev_exec_qty = float(row.get("executedQty", 0))
+
                             # Update only fields present in both gateway result and local columns
                             for col in self.order_tracker.columns:
                                 if col in details:
@@ -91,8 +104,30 @@ class OrderTracker:
                             # Also update "order_date" from updateTime if available
                             update_time = details.get("updateTime") or details.get("time")
                             if update_time:
-                                dt = datetime.datetime.fromtimestamp(int(update_time) / 1000)
+                                dt = datetime.fromtimestamp(int(update_time) / 1000)
                                 self.order_tracker.at[idx, "order_date"] = dt.date()
+
+                            # ✅ Compute realized PnL if transitioned to filled/cancelled or partially filled
+                            new_status = details.get("status")
+                            exec_qty = float(details.get("executedQty", 0))
+                            price = float(details.get("avgPrice") or details.get("price") or 0.0)
+
+                            pnl = 0.0
+                            if prev_status in ["NEW", "PARTIALLY_FILLED"] and new_status in ["FILLED", "CANCELED", "PARTIALLY_FILLED"] and exec_qty > prev_exec_qty:
+                                delta_qty = exec_qty - prev_exec_qty
+
+                                if row["side"] == "SELL":
+                                    side_factor = 1
+                                elif row["side"] == "BUY":
+                                    side_factor = -1
+                                else:
+                                    side_factor = 0
+
+                                closing_qty = min(abs(pre_qty), delta_qty)
+                                open_qty = max(0, delta_qty - abs(pre_qty))
+                                pnl = (price - pre_price) * closing_qty * side_factor
+
+                                self.order_tracker.at[idx, "realizedPnl"] = round(pnl, 3)
 
                     except Exception as e:
                         print(f"❌ Failed to update order {order_id}: {e}")
@@ -115,7 +150,7 @@ class OrderTracker:
             return
         df = pd.read_csv(self.csv_path)
         df["order_date"] = pd.to_datetime(df["order_date"]).dt.date
-        today = datetime.date.today()
+        today = date.today()
         if mode == "today_open_only":
             open_status = ["NEW", "PARTIALLY_FILLED"]
             mask = (df["order_date"] == today) | (df["status"].isin(open_status))
@@ -127,7 +162,7 @@ class OrderTracker:
 
     async def end_of_day_save(self):
         async with self.lock:
-            today = datetime.date.today()
+            today = date.today()
             order_dates = pd.to_datetime(self.order_tracker["order_date"]).dt.date
 
             # Step 1: Filter all prior-day orders (open or closed)
@@ -154,8 +189,8 @@ class OrderTracker:
 
     async def _end_of_day_scheduler(self):
         while True:
-            now = datetime.datetime.now()
-            next_run = (now + datetime.timedelta(days=1)).replace(hour=0, minute=2, second=0, microsecond=0)
+            now = datetime.now()
+            next_run = (now + timedelta(days=1)).replace(hour=0, minute=2, second=0, microsecond=0)
             await asyncio.sleep((next_run - now).total_seconds())
             await self.end_of_day_save()
 
