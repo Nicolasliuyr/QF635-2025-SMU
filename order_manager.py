@@ -83,8 +83,8 @@ class OrderTracker:
                 print(f"🔄 Updating {len(active_orders)} active orders...")
 
                 # ✅ Snapshot current pre-position info
-                pre_qty = self.MARKETDATA.positions
-                pre_price = self.MARKETDATA.entryPrice
+                pre_qty = self.pre_qty
+                pre_price = self.pre_price
 
                 for idx, row in active_orders.iterrows():
                     order_id = row["orderId"]
@@ -131,6 +131,9 @@ class OrderTracker:
 
                     except Exception as e:
                         print(f"❌ Failed to update order {order_id}: {e}")
+
+                self.pre_qty = self.MARKETDATA.positions or 0.0
+                self.pre_price = self.MARKETDATA.entryPrice or 0.0
 
 
     async def write_to_csv(self):
