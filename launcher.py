@@ -33,12 +33,33 @@ def draw_candle(ax1, ax2, df):
         y_base_bottom = l - 20
         if pd.notna(row['Signal']):
             ax1.text(mdates.date2num(time), y_base_top, row['Signal'], ha='center', va='bottom', fontsize=8, color='blue')
-        if pd.notna(row['SignalTrade']):
+
+        label_y_offset = 0
+        label_spacing = 25  # pixels between labels
+
+        for label, color in [
+            (row.get("SignalTrade"), "black"),
+            (row.get("AfterCare"), "purple"),
+            (row.get("RiskTrigger"), "red")
+        ]:
+            if pd.notna(label):
+                ax1.text(
+                    mdates.date2num(time),
+                    y_base_bottom - label_y_offset,
+                    label,
+                    ha='center',
+                    va='top',
+                    fontsize=8,
+                    color=color
+                )
+                label_y_offset += label_spacing
+
+        '''if pd.notna(row['SignalTrade']):
             ax1.text(mdates.date2num(time), y_base_bottom, row['SignalTrade'], ha='center', va='top', fontsize=8, color='black')
         if pd.notna(row['AfterCare']):
             ax1.text(mdates.date2num(time), y_base_bottom - 10, row['AfterCare'], ha='center', va='top', fontsize=8, color='purple')
         if pd.notna(row['RiskTrigger']):
-            ax1.text(mdates.date2num(time), y_base_bottom - 20, row['RiskTrigger'], ha='center', va='top', fontsize=8, color='red')
+            ax1.text(mdates.date2num(time), y_base_bottom - 20, row['RiskTrigger'], ha='center', va='top', fontsize=8, color='red')'''
 
     ax2.bar(df['open_time'], df['volume'], width=candle_width, color='gray')
 

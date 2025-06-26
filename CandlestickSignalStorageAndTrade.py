@@ -143,7 +143,7 @@ class CandlestickDataStorage:
 
         # Convert to datetime directly instead of int
         df["open_time"] = pd.to_datetime(df["open_time"])
-        df["close_time"] = pd.to_datetime(df["close_time"])
+        df["close_time"] = pd.to_datetime(df["close_time"], format="%Y-%m-%d %H:%M:%S", errors='coerce')
 
         df[["open", "high", "low", "close"]] = df[["open", "high", "low", "close"]].astype(float).round(1)
         df["volume"] = df["volume"].astype(float).round(3)
