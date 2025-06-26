@@ -59,8 +59,11 @@ class Signal:
         self.current_trade = None
 
         #Circuit Breaker parameters
-        self.CIRCUIT_BREAKER_DROP = 0.025  # 2.5%
-        self.CIRCUIT_BREAKER_LOOKBACK = 1440  # 1440 bars = 1 day for 1m bars
+        self.CIRCUIT_BREAKER_DROP = 0.0025  # 2.5%
+        self.CIRCUIT_BREAKER_LOOKBACK = 1440  # 1440 bars = 1 day for 1m bars # for demo. maximum no. of bars <= no. candlesticks available at 1 shot
+        self.CIRCUIT_BREAKER_SKIP_NO_TRADES = 2 # circuit_breaker behaviour skip 1 trade = wait 1m
+        self.SKIP_TRADE_COUNT = 0 # count no. of skipped trades
+        self.CIRCUIT_BREAKER_ACTIVATED = False
 
         #Signal generating date/time parameters
         self.us_holidays = holidays.US()
@@ -127,6 +130,25 @@ class Signal:
         #global ml_trained, scaler, sgd, ml_history
         df = self.get_feature_df()
         latest = df.iloc[-1]
+
+        if self.CIRCUIT_BREAKER_ACTIVATED:
+            if self.SKIP_TRADE_COUNT < self.CIRCUIT_BREAKER_SKIP_NO_TRADES:
+                self.SKIP_TRADE_COUNT = self.SKIP_TRADE_COUNT + 1
+                print(self.SKIP_TRADE_COUNT)
+                return "NO_ACTION"
+            else:
+                self.SKIP_TRADE_COUNT=0
+                self.CIRCUIT_BREAKER_ACTIVATED = False
+                print("Trade resumed")
+
+        #check soft circuit_breaker
+        if self.circuit_breaker(df):
+            self.CIRCUIT_BREAKER_ACTIVATED = True
+            print(f"circuit breaker activated, skip {self.CIRCUIT_BREAKER_SKIP_NO_TRADES} trade")
+            self.SKIP_TRADE_COUNT = self.SKIP_TRADE_COUNT + 1
+            print(self.SKIP_TRADE_COUNT)
+            return "NO_ACTION"
+
         hour = latest['timestamp'].hour
         if self.TRADE_HOURS_UTC and hour not in self.TRADE_HOURS_UTC:
             return "Time" #0
@@ -171,7 +193,8 @@ class Signal:
             return False  # Not enough data, don't block
         start_price = df['close'].iloc[-self.CIRCUIT_BREAKER_LOOKBACK]
         end_price = df['close'].iloc[-1]
-        drop = (start_price - end_price) / start_price
+        #drop = (start_price - end_price) / start_price
+        drop=0.3
         if drop >= self.CIRCUIT_BREAKER_DROP:
             print(f"[CIRCUIT BREAKER] BTC dropped {drop*100:.2f}% in last {self.CIRCUIT_BREAKER_LOOKBACK} bars. No new trades.")
             return True  # Block trades
