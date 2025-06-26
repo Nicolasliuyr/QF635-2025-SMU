@@ -193,8 +193,7 @@ class Signal:
             return False  # Not enough data, don't block
         start_price = df['close'].iloc[-self.CIRCUIT_BREAKER_LOOKBACK]
         end_price = df['close'].iloc[-1]
-        #drop = (start_price - end_price) / start_price
-        drop=0.3
+        drop = (start_price - end_price) / start_price
         if drop >= self.CIRCUIT_BREAKER_DROP:
             print(f"[CIRCUIT BREAKER] BTC dropped {drop*100:.2f}% in last {self.CIRCUIT_BREAKER_LOOKBACK} bars. No new trades.")
             return True  # Block trades
