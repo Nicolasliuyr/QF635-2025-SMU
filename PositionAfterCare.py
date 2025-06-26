@@ -16,11 +16,11 @@ class PositionAfterCare:
         self.execution=execution
         self.storage=storage
         self.current_trade = None
-        self.STOP_LOSS_PCT = 0.003
-        self.TAKE_PROFIT_PCT = 0.007
+        self.STOP_LOSS_PCT = 0.003 #0.003
+        self.TAKE_PROFIT_PCT = 0.007 #0.007
         self.LEVERAGE = 50
-        self.TRAIL_START_ROI = 4.0
-        self.TRAIL_GIVEBACK = 1.25
+        self.TRAIL_START_ROI = 4.0  #4.0
+        self.TRAIL_GIVEBACK = 1.25  #1.25
         self.SYMBOL = 'BTCUSDT'
 
     async def start(self):
@@ -43,6 +43,7 @@ class PositionAfterCare:
 
             if self.current_trade:
                 margin = abs(self.current_trade['quantity']) * self.current_trade['entry_price'] / self.LEVERAGE if self.current_trade['quantity'] != 0 else 0
+                self.current_trade['official_open_pnl']=self.MARKETDATA.unRealizedProfit
                 roi = (self.current_trade['official_open_pnl'] / margin) * 100 if margin != 0 else 0
                 side = self.current_trade['side']
                 qty = self.current_trade['quantity']
@@ -68,6 +69,7 @@ class PositionAfterCare:
                             await self.execution.execute_order(symbol=self.SYMBOL, side="BUY", quantity=abs(qty), exec_type="MARKET")
                             self.storage.update_signal(aftercare="C")
 
+                        await asyncio.sleep(1)
                         '''time.sleep(2)
                         realized_pnl, close_time, commission, order_id = get_last_closed_trade_details(SYMBOL) = to get last trade details.
                         reason = f"Trailing stop hit at {roi:.2f}% (peak {current_trade['peak_roi']:.2f}%)"
@@ -103,6 +105,7 @@ class PositionAfterCare:
                     await self.execution.execute_order(symbol=self.SYMBOL, side="SELL", quantity=abs(qty), exec_type="MARKET")
                     self.storage.update_signal(aftercare="C")
 
+                    await asyncio.sleep(1)
                     '''time.sleep(2)
                     realized_pnl, close_time, commission, order_id = get_last_closed_trade_details(SYMBOL)
                     reason = "SL hit"
@@ -133,6 +136,7 @@ class PositionAfterCare:
                     await self.execution.execute_order(symbol=self.SYMBOL, side="SELL", quantity=abs(qty), exec_type="MARKET")
                     self.storage.update_signal(aftercare="C")
 
+                    await asyncio.sleep(1)
                     '''time.sleep(2)
                     realized_pnl, close_time, commission, order_id = get_last_closed_trade_details(SYMBOL)
                     reason = "TP hit"
@@ -163,6 +167,7 @@ class PositionAfterCare:
                     await self.execution.execute_order(symbol=self.SYMBOL, side="BUY", quantity=abs(qty), exec_type="MARKET")
                     self.storage.update_signal(aftercare="C")
 
+                    await asyncio.sleep(1)
                     '''time.sleep(2)
                     realized_pnl, close_time, commission, order_id = get_last_closed_trade_details(SYMBOL)
                     reason = "SL hit"
@@ -193,6 +198,7 @@ class PositionAfterCare:
                     await self.execution.execute_order(symbol=self.SYMBOL, side="BUY", quantity=abs(qty), exec_type="MARKET")
                     self.storage.update_signal(aftercare="C")
 
+                    await asyncio.sleep(1)
                     '''time.sleep(2)
                     realized_pnl, close_time, commission, order_id = get_last_closed_trade_details(SYMBOL)
                     reason = "TP hit"
