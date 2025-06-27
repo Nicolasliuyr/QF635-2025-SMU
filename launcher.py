@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.patches as patches
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.gridspec as gridspec
 import asyncio
 import MainFile
 import pandas as pd
@@ -194,7 +195,13 @@ for key in ["position", "totalMarginBalance", "availableBalance", "var_value", "
     lbl.pack(side=tk.LEFT, padx=10)
     status_labels[key] = lbl
 
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
+#fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
+
+fig = plt.figure(figsize=(10, 6))
+gs = gridspec.GridSpec(2, 1, height_ratios=[3, 1])  # 3:1 ratio
+ax1 = fig.add_subplot(gs[0])
+ax2 = fig.add_subplot(gs[1], sharex=ax1)
+
 canvas = FigureCanvasTkAgg(fig, master=frame_chart)
 canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
