@@ -254,15 +254,7 @@ class BinanceTestnetDataCollector:
         return None
 
     async def get_ad_hoc_candlesticks(self, symbol: str, interval: str, limit: int = 366):
-        """
-        Retrieve raw candlestick data for the given symbol and interval.
-        Args:
-            symbol (str): e.g., 'BTCUSDT'
-            interval (str): e.g., '1m', '5m', '1h'
-            limit (int): Number of candles to fetch (default 200, max 1500)
-        Returns:
-            List of candlesticks, each is a list of 12 values as per Binance API format.
-        """
+
         try:
             candles = await self.client.futures_klines(
                 symbol=symbol.upper(),

@@ -70,29 +70,7 @@ class PositionAfterCare:
                             self.storage.update_signal(aftercare="C")
 
                         await asyncio.sleep(1)
-                        '''time.sleep(2)
-                        realized_pnl, close_time, commission, order_id = get_last_closed_trade_details(SYMBOL) = to get last trade details.
-                        reason = f"Trailing stop hit at {roi:.2f}% (peak {current_trade['peak_roi']:.2f}%)"
-                        trade = {
-                            'datetime_open': current_trade['datetime_open'],
-                            'datetime_close': close_time if close_time else now,
-                            'symbol': SYMBOL,
-                            'side': side,
-                            'open_price': entry_price,
-                            'close_price': entry_price,
-                            'quantity': abs(position_amt),
-                            'signal': get_signal(get_feature_df()),
-                            'pnl': realized_pnl,
-                            'commission': commission,
-                            'trade_length_min': (now - pd.to_datetime(current_trade['datetime_open'],
-                                                                      utc=True)).total_seconds() / 60,
-                            'binance_order_id': order_id,
-                            'binance_trade_time': close_time,
-                            'official_realized_pnl': realized_pnl,
-                            'official_commission': commission,
-                            'reason': reason
-                        }'''
-                        '''log_trade(trade)'''
+
                         self.current_trade = None
                         continue
 
@@ -106,29 +84,7 @@ class PositionAfterCare:
                     self.storage.update_signal(aftercare="C")
 
                     await asyncio.sleep(1)
-                    '''time.sleep(2)
-                    realized_pnl, close_time, commission, order_id = get_last_closed_trade_details(SYMBOL)
-                    reason = "SL hit"
-                    trade = {
-                        'datetime_open': current_trade['datetime_open'],
-                        'datetime_close': close_time if close_time else now,
-                        'symbol': SYMBOL,
-                        'side': side,
-                        'open_price': entry_price,
-                        'close_price': entry_price,
-                        'quantity': abs(position_amt),
-                        'signal': get_signal(get_feature_df()),
-                        'pnl': realized_pnl,
-                        'commission': commission,
-                        'trade_length_min': (now - pd.to_datetime(current_trade['datetime_open'],
-                                                                  utc=True)).total_seconds() / 60,
-                        'binance_order_id': order_id,
-                        'binance_trade_time': close_time,
-                        'official_realized_pnl': realized_pnl,
-                        'official_commission': commission,
-                        'reason': reason
-                    }
-                    log_trade(trade)'''
+
                     self.current_trade = None
 
                 elif side == 'LONG' and roi >= tp_roi:
@@ -137,29 +93,7 @@ class PositionAfterCare:
                     self.storage.update_signal(aftercare="C")
 
                     await asyncio.sleep(1)
-                    '''time.sleep(2)
-                    realized_pnl, close_time, commission, order_id = get_last_closed_trade_details(SYMBOL)
-                    reason = "TP hit"
-                    trade = {
-                        'datetime_open': current_trade['datetime_open'],
-                        'datetime_close': close_time if close_time else now,
-                        'symbol': SYMBOL,
-                        'side': side,
-                        'open_price': entry_price,
-                        'close_price': entry_price,
-                        'quantity': abs(position_amt),
-                        'signal': get_signal(get_feature_df()),
-                        'pnl': realized_pnl,
-                        'commission': commission,
-                        'trade_length_min': (now - pd.to_datetime(current_trade['datetime_open'],
-                                                                  utc=True)).total_seconds() / 60,
-                        'binance_order_id': order_id,
-                        'binance_trade_time': close_time,
-                        'official_realized_pnl': realized_pnl,
-                        'official_commission': commission,
-                        'reason': reason
-                    }
-                    log_trade(trade)'''
+
                     self.current_trade = None
 
                 elif side == 'SHORT' and roi <= sl_roi:
@@ -168,29 +102,7 @@ class PositionAfterCare:
                     self.storage.update_signal(aftercare="C")
 
                     await asyncio.sleep(1)
-                    '''time.sleep(2)
-                    realized_pnl, close_time, commission, order_id = get_last_closed_trade_details(SYMBOL)
-                    reason = "SL hit"
-                    trade = {
-                        'datetime_open': current_trade['datetime_open'],
-                        'datetime_close': close_time if close_time else now,
-                        'symbol': SYMBOL,
-                        'side': side,
-                        'open_price': entry_price,
-                        'close_price': entry_price,
-                        'quantity': abs(position_amt),
-                        'signal': get_signal(get_feature_df()),
-                        'pnl': realized_pnl,
-                        'commission': commission,
-                        'trade_length_min': (now - pd.to_datetime(current_trade['datetime_open'],
-                                                                  utc=True)).total_seconds() / 60,
-                        'binance_order_id': order_id,
-                        'binance_trade_time': close_time,
-                        'official_realized_pnl': realized_pnl,
-                        'official_commission': commission,
-                        'reason': reason
-                    }
-                    log_trade(trade)'''
+
                     self.current_trade = None
 
                 elif side == 'SHORT' and roi >= tp_roi:
@@ -199,28 +111,6 @@ class PositionAfterCare:
                     self.storage.update_signal(aftercare="C")
 
                     await asyncio.sleep(1)
-                    '''time.sleep(2)
-                    realized_pnl, close_time, commission, order_id = get_last_closed_trade_details(SYMBOL)
-                    reason = "TP hit"
-                    trade = {
-                        'datetime_open': current_trade['datetime_open'],
-                        'datetime_close': close_time if close_time else now,
-                        'symbol': SYMBOL,
-                        'side': side,
-                        'open_price': entry_price,
-                        'close_price': entry_price,
-                        'quantity': abs(position_amt),
-                        'signal': get_signal(get_feature_df()),
-                        'pnl': realized_pnl,
-                        'commission': commission,
-                        'trade_length_min': (now - pd.to_datetime(current_trade['datetime_open'],
-                                                                  utc=True)).total_seconds() / 60,
-                        'binance_order_id': order_id,
-                        'binance_trade_time': close_time,
-                        'official_realized_pnl': realized_pnl,
-                        'official_commission': commission,
-                        'reason': reason
-                    }
-                    log_trade(trade)'''
+
                     self.current_trade = None
             await asyncio.sleep(5)

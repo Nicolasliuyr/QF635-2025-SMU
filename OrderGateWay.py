@@ -106,9 +106,7 @@ class BinanceOrderGateway:
 
 
     async def get_income_history(self, limit: int = 100, income_type: str = "REALIZED_PNL"):
-        """
-        Fetch recent income history, e.g., realized PnL.
-        """
+
         try:
             return await self.client.futures_income_history(
                 symbol=self.symbol,
